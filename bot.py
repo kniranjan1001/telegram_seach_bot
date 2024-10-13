@@ -9,7 +9,11 @@ logger = logging.getLogger(__name__)
 
 # URL where your JSON data is stored
 JSON_URL = 'https://api.jsonsilo.com/public/e4a0f8e8-47f9-474d-b759-448437c45a0c'
-BOT_TOKEN = ''
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+
+# Ensure to add error handling if the environment variable is not set
+if BOT_TOKEN is None:
+    raise ValueError("No BOT_TOKEN set for this environment")
 
 # Function to fetch movie data from JSON URL
 def fetch_movie_data():
