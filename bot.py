@@ -71,6 +71,9 @@ async def search_movie(update: Update, context: CallbackContext) -> None:
     # Get the movie name from the user's message
     movie_name = update.message.text.strip()
 
+     # Show 'typing' action to indicate loading
+    await context.bot.send_chat_action(chat_id=update.message.chat_id, action='typing')
+
     # Search for the movie in the JSON data
     result = await search_movie_in_json(movie_name)
 
