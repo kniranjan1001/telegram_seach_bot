@@ -3,6 +3,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 import logging
 import requests
 import os
+from flask import Flask, request
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -15,6 +16,9 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 # Ensure to add error handling if the environment variable is not set
 if BOT_TOKEN is None:
     raise ValueError("No BOT_TOKEN set for this environment")
+
+# Create Flask app
+app = Flask(__name__)
 
 # Function to fetch movie data from JSON URL
 def fetch_movie_data():
@@ -144,7 +148,17 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     else:
         await query.edit_message_text("Unknown command. Please try again.")
 
+# Set up webhook route
+@app.route(f'/{BOT_TOKEN}', methods=['POST'])
+def webhook():
+    update = request.get_json()
+    Application.builder().token(BOT_TOKEN).build().process_update(update)
+    return '', 200
+
 def main():
+    # Set the webhook URL
+    webhook_url = f'https://middleman.onrender.com/{BOT_TOKEN}'
+    
     # Create the Application and pass your bot's token
     application = Application.builder().token(BOT_TOKEN).build()
 
@@ -160,8 +174,8 @@ def main():
     # Add a handler for regular text messages (when user sends just a movie name without /search)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
 
-    # Start the Bot
-    application.run_polling()
+    # Set the webhook
+    application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)), url_path=BOT_TOKEN)
 
 if __name__ == '__main__':
     main()
