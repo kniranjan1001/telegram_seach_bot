@@ -157,7 +157,7 @@ def webhook():
 
 def main():
     # Set the webhook URL
-    webhook_url = f'https://middleman-k8jr.onrender.com/{BOT_TOKEN}'
+    webhook_url = f"https://middleman-k8jr.onrender.com/{BOT_TOKEN}"
     
     # Create the Application and pass your bot's token
     application = Application.builder().token(BOT_TOKEN).build()
@@ -175,7 +175,12 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
 
     # Set the webhook
-    application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)), url_path=BOT_TOKEN)
+   application.run_webhook(
+    listen='0.0.0.0',
+    port=int(os.environ.get("PORT", 5000)),
+    webhook_url=webhook_url,  # Explicitly set the webhook URL
+    url_path=BOT_TOKEN
+)
 
 if __name__ == '__main__':
     main()
