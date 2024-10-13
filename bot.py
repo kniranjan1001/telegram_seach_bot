@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 # URL where your JSON data is stored
 JSON_URL = 'https://api.jsonsilo.com/public/e4a0f8e8-47f9-474d-b759-448437c45a0c'
+BOT_TOKEN = ''
 
 # Function to fetch movie data from JSON URL
 def fetch_movie_data():
@@ -140,10 +141,9 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 
 def main():
     # Replace 'YOUR_BOT_TOKEN' with your actual bot token
-    bot_token = '7080979683:AAEpC3sI31tiwj1NFrBWyT-leixgkVu2AH4'
 
     # Create the Application and pass your bot's token
-    application = Application.builder().token(bot_token).build()
+    application = Application.builder().token(BOT_TOKEN).build()
 
     # Add a handler for the '/start' command
     application.add_handler(CommandHandler('start', start_command))
