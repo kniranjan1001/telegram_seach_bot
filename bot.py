@@ -91,10 +91,13 @@ async def search_command(update: Update, context: CallbackContext) -> None:
         # Get the movie name from the command arguments
         movie_name = " ".join(context.args).strip()
 
+        # Show 'typing' action to indicate loading
+        await context.bot.send_chat_action(chat_id=update.message.chat_id, action='typing')
+
         # Search for the movie in the JSON data
         movie_result = await search_movie_in_json(movie_name)
 
-        # Send the result back to the user
+        # Stop 'typing' and send the result back to the user
         if isinstance(movie_result, InlineKeyboardMarkup):
             response_message = await update.message.reply_text(f"Search 🔍 results for '{movie_name}'🍿:", reply_markup=movie_result)
         else:
