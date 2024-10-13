@@ -157,7 +157,7 @@ def webhook():
 
 def main():
     # Set the webhook URL
-    webhook_url = f'https://middleman-fpbv.onrender.com/{BOT_TOKEN}'
+    webhook_url = f'https://middleman-k8jr.onrender.com/{BOT_TOKEN}'
     
     # Create the Application and pass your bot's token
     application = Application.builder().token(BOT_TOKEN).build()
