@@ -1,11 +1,11 @@
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, CallbackContext
-from keep_alive import keep_alive
 import logging
 import requests
 import os
+import threading
+import time
 
-keep_alive()
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -146,8 +146,18 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     else:
         await query.edit_message_text("Unknown command. Please try again.")
 
+# Keep-alive function to ping the bot's endpoint
+def keep_alive():
+    while True:
+        try:
+            requests.get(f'https://api.telegram.org/bot{BOT_TOKEN}/getMe')  # Ping the bot's API to keep it alive
+            time.sleep(600)  # Sleep for 10 minutes before pinging again
+        except Exception as e:
+            logger.error(f"Keep-alive request failed: {e}")
+
 def main():
-    # Replace 'YOUR_BOT_TOKEN' with your actual bot token
+    # Start the keep-alive thread
+    threading.Thread(target=keep_alive, daemon=True).start()
 
     # Create the Application and pass your bot's token
     application = Application.builder().token(BOT_TOKEN).build()
