@@ -50,7 +50,7 @@ async def search_movie_in_json(movie_name: str):
             keyboard = InlineKeyboardMarkup(inline_keyboard=[[button] for button in buttons])
             return keyboard
         else:
-            return "Movie not found😿. Kindly request your movie - [here](https://t.me/anonyms_middle_man_bot)"  # Return a message if no buttons are created
+            return "Movie not found! 😿 \n Please check the spelling or send exact name.\n If it's still missing, kindly request your movie [here](https://t.me/anonyms_middle_man_bot) 🎬"  # Return a message if no buttons are created
     except Exception as e:
         logger.error(f"Error searching movie data: {e}")
         return "An error😿 occurred while searching for the movie."
