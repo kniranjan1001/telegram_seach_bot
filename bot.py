@@ -185,7 +185,7 @@ async def user_list_command(update: Update, context: CallbackContext):
         user_list = "\n".join([str(user_id) for user_id in user_ids])
         await update.message.reply_text(f"List of connected users:\n{user_list or 'No users connected.'}")
 
-async def set_webhook(application):
+async def set_webhook(application: Application):
     webhook_url = f"https://middleman-k8jr.onrender.com/{BOT_TOKEN}"
     await application.bot.set_webhook(webhook_url)
     logger.info("Webhook set successfully!")
@@ -193,8 +193,8 @@ async def set_webhook(application):
 def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Set the webhook after building the application
-    application.loop.run_until_complete(set_webhook(application))
+    # Use the 'run_until_complete' method of asyncio to set the webhook
+    application.run_async(set_webhook(application))
 
     # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
@@ -216,4 +216,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
