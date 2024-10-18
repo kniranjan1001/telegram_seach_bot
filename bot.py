@@ -1,4 +1,3 @@
-from flask import Flask, request
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, CallbackContext
 import logging
@@ -10,12 +9,9 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID'))
-JSON_URL = os.getenv('JSON_URL')
-
-# Initialize Flask app
-app = Flask(__name__)
+BOT_TOKEN = os.getenv('BOT_TOKEN')  # Your Telegram bot token
+ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID'))  # Your Telegram user ID
+JSON_URL = os.getenv('JSON_URL')  # URL where your JSON data is stored
 
 # A global set to store unique user IDs
 user_ids = set()
@@ -24,8 +20,8 @@ user_ids = set()
 def fetch_movie_data():
     try:
         response = requests.get(JSON_URL)
-        response.raise_for_status()
-        return response.json()
+        response.raise_for_status()  # Raise an error for bad responses
+        return response.json()  # Return the JSON data as a dictionary
     except requests.RequestException as e:
         logger.error(f"Error fetching data from JSON URL: {e}")
         return {}
@@ -33,11 +29,18 @@ def fetch_movie_data():
 # Function to search for the movie in the JSON data
 async def search_movie_in_json(movie_name: str):
     try:
+        # Fetch movie data from the JSON URL
         movie_data = fetch_movie_data()
+
+        # Initialize a list to hold button objects
         buttons = []
+
+        # Iterate through movie data and create buttons
         for key, value in movie_data.items():
             if movie_name.lower() in key.lower():
                 buttons.append(InlineKeyboardButton(text=key, url=value))
+
+        # Create the inline keyboard markup
         if buttons:
             keyboard = InlineKeyboardMarkup(inline_keyboard=[[button] for button in buttons])
             return keyboard
@@ -61,7 +64,7 @@ async def delete_message(context: CallbackContext):
 
 # Function to store user IDs
 async def add_user_id(update: Update):
-    user_id = update.message.chat.id
+    user_id = update.message.chat_id
     if user_id not in user_ids:
         user_ids.add(user_id)
         logger.info(f"New user added: {user_id}")
@@ -70,33 +73,64 @@ async def add_user_id(update: Update):
 async def search_movie(update: Update, context: CallbackContext) -> None:
     await add_user_id(update)
     movie_name = update.message.text.strip()
-    await context.bot.send_chat_action(chat_id=update.message.chat.id, action='typing')
+
+    # Show 'typing' action to indicate loading
+    await context.bot.send_chat_action(chat_id=update.message.chat_id, action='typing')
+
+    # Send a creative message with simulated loading
     loading_message = await update.message.reply_text("🔍 Searching the movie vaults... 🍿 Hang tight while we find your movie! 🎬")
+
+    # Search for the movie in the JSON data
     result = await search_movie_in_json(movie_name)
 
     if isinstance(result, InlineKeyboardMarkup):
+        # Edit the loading message with the result
         response_message = await loading_message.edit_text(f"Search🔍 results for '{movie_name}' 🍿 :", reply_markup=result)
+        
+        # Log when the job is scheduled
+        logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat_id} after 60 seconds.")
+        
+        # Schedule message deletion after 1 minute (60 seconds)
+        context.job_queue.run_once(delete_message, 60, context={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
     else:
+        # Edit the loading message with the error message
         response_message = await loading_message.edit_text(result)
-
-    logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat.id} after 60 seconds.")
-    context.application.job_queue.run_once(delete_message, 60, context={'message_id': response_message.message_id, 'chat_id': update.message.chat.id})
+        
+        # Log when the job is scheduled
+        logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat_id} after 60 seconds.")
+        
+        # Schedule message deletion after 1 minute (60 seconds)
+        context.job_queue.run_once(delete_message, 60, context={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
 
 # Function to handle the '/search <movie_name>' command
 async def search_command(update: Update, context: CallbackContext) -> None:
     if context.args:
         movie_name = " ".join(context.args).strip()
-        await context.bot.send_chat_action(chat_id=update.message.chat.id, action='typing')
+        await context.bot.send_chat_action(chat_id=update.message.chat_id, action='typing')
+
+        # Send loading message
         loading_message = await update.message.reply_text("🔍 Crunching through the movie vault... 🍿 Please hold on while we grab your movie magic! 🎥")
+
         movie_result = await search_movie_in_json(movie_name)
 
         if isinstance(movie_result, InlineKeyboardMarkup):
+            # Edit the loading message with the result
             response_message = await loading_message.edit_text(f"Search 🔍 results for '{movie_name}'🍿:", reply_markup=movie_result)
+            
+            # Log when the job is scheduled
+            logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat_id} after 60 seconds.")
+            
+            # Schedule message deletion after 1 minute (60 seconds)
+            context.job_queue.run_once(delete_message, 60, context={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
         else:
+            # Edit the loading message with an error message
             response_message = await loading_message.edit_text(movie_result)
-
-        logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat.id} after 60 seconds.")
-        context.application.job_queue.run_once(delete_message, 60, context={'message_id': response_message.message_id, 'chat_id': update.message.chat.id})
+            
+            # Log when the job is scheduled
+            logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat_id} after 60 seconds.")
+            
+            # Schedule message deletion after 1 minute (60 seconds)
+            context.job_queue.run_once(delete_message, 60, context={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
     else:
         await update.message.reply_text("Please provide a movie name. Usage: /search <movie_name>")
 
@@ -130,7 +164,8 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 
 # Function to handle broadcasting messages
 async def broadcast_message(update: Update, context: CallbackContext):
-    if update.message.chat.id == ADMIN_USER_ID:
+    # Check if the command is from the admin
+    if update.message.chat_id == ADMIN_USER_ID:
         message = " ".join(context.args)
         if message:
             for user_id in user_ids:
@@ -146,20 +181,12 @@ async def broadcast_message(update: Update, context: CallbackContext):
 
 # Function to handle user list display (admin only)
 async def user_list_command(update: Update, context: CallbackContext):
-    if update.message.chat.id == ADMIN_USER_ID:
+    if update.message.chat_id == ADMIN_USER_ID:
         user_list = "\n".join([str(user_id) for user_id in user_ids])
         await update.message.reply_text(f"List of connected users:\n{user_list or 'No users connected.'}")
 
-# Set up webhook route
-@app.route(f'/{BOT_TOKEN}', methods=['POST'])
-def webhook():
-    update = request.get_json()
-    application.process_update(update)  # Use the application instance directly
-    return '', 200
-
 # Main function to run the bot
 def main() -> None:
-    global application
     application = Application.builder().token(BOT_TOKEN).build()
 
     # Add command handlers
@@ -174,8 +201,8 @@ def main() -> None:
     # Add callback query handler for button presses
     application.add_handler(CallbackQueryHandler(button_callback))
 
-    # Set the webhook
-    application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)), webhook_url=f"https://middleman-k8jr.onrender.com/{BOT_TOKEN}")
+    # Run the bot
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
