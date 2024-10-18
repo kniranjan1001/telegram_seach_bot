@@ -3,6 +3,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 import logging
 import requests
 import os
+import asyncio
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -193,8 +194,8 @@ async def set_webhook(application: Application):
 def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Use the 'run_until_complete' method of asyncio to set the webhook
-    application.run_async(set_webhook(application))
+    # Create an asyncio event loop to run the webhook setup
+    asyncio.run(set_webhook(application))
 
     # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
