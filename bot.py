@@ -1,3 +1,4 @@
+from flask import Flask, request  # Import Flask and request
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, CallbackContext
 import logging
@@ -12,6 +13,9 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv('BOT_TOKEN')  # Your Telegram bot token
 ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID'))  # Your Telegram user ID
 JSON_URL = os.getenv('JSON_URL')  # URL where your JSON data is stored
+
+# Initialize Flask app
+app = Flask(__name__)
 
 # A global set to store unique user IDs
 user_ids = set()
@@ -208,12 +212,8 @@ def main() -> None:
     # Add callback query handler for button presses
     application.add_handler(CallbackQueryHandler(button_callback))
 
-    # Add a handler for regular text messages (when user sends just a movie name without /search)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
-
-     # Set the webhook
-    application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)),webhook_url=webhook_url, url_path=BOT_TOKEN)
-
+    # Set the webhook
+    application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)), webhook_url=f"https://{os.environ.get('RENDER_EXTERNAL_URL')}/{BOT_TOKEN}")
 
 if __name__ == '__main__':
     main()
