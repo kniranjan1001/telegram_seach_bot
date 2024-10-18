@@ -195,7 +195,10 @@ def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
 
     # Create an asyncio event loop to run the webhook setup
-    asyncio.run(set_webhook(application))
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    loop.run_until_complete(set_webhook(application))
 
     # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
@@ -213,7 +216,7 @@ def main() -> None:
     port = int(os.getenv('PORT', 8443))
 
     # Run the bot with port binding
-    application.run_webhook(port=port)
+    loop.run_until_complete(application.run_webhook(port=port))
 
 if __name__ == '__main__':
     main()
