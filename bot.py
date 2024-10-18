@@ -213,7 +213,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(button_callback))
 
     # Set the webhook
-    application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)), webhook_url=f"https://{os.environ.get('RENDER_EXTERNAL_URL')}/{BOT_TOKEN}")
+    application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)), webhook_url=f"https://middleman-k8jr.onrender.com/{BOT_TOKEN}")
 
 if __name__ == '__main__':
     main()
