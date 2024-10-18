@@ -186,13 +186,10 @@ async def user_list_command(update: Update, context: CallbackContext):
         user_list = "\n".join([str(user_id) for user_id in user_ids])
         await update.message.reply_text(f"List of connected users:\n{user_list or 'No users connected.'}")
 
-async def set_webhook(application: Application):
-    webhook_url = f"https://middleman-k8jr.onrender.com/{BOT_TOKEN}"
-    await application.bot.set_webhook(webhook_url)
-    logger.info("Webhook set successfully!")
 
 def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
+    webhook_url = f"https://middleman-k8jr.onrender.com/{BOT_TOKEN}"
 
     # Create an asyncio event loop to run the webhook setup
     loop = asyncio.new_event_loop()
@@ -212,11 +209,7 @@ def main() -> None:
     # Add callback query handler for button presses
     application.add_handler(CallbackQueryHandler(button_callback))
 
-    # Get the port from the environment variable, default to 8443
-    port = int(os.getenv('PORT', 8443))
-
-    # Run the bot with port binding
-    loop.run_until_complete(application.run_webhook(port=port))
-
+    # Set the webhook
+    application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)),webhook_url=webhook_url, url_path=BOT_TOKEN)
 if __name__ == '__main__':
     main()
