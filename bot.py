@@ -198,11 +198,11 @@ def main() -> None:
     # Add message handler for text messages
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
     
-    # Add callback query handler for button presses
-    application.add_handler(CallbackQueryHandler(button_callback))
+    # Get the port from the environment variable, default to 8443
+    port = int(os.getenv('PORT', 8443))
 
-    # Run the bot
-    application.run_polling()
+    # Run the bot with port binding
+    application.run_webhook(port=port)
 
 if __name__ == '__main__':
     main()
