@@ -165,13 +165,15 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 
 # Function to handle broadcasting messages
 async def broadcast_message(update: Update, context: CallbackContext):
-    # Check if the command is from the admin
     if update.message.chat_id == ADMIN_USER_ID:
         message = " ".join(context.args)
         if message:
             for user_id in user_ids:
                 try:
                     await context.bot.send_message(chat_id=user_id, text=message)
+                except telegram.error.Forbidden:
+                    logger.warning(f"User {user_id} has blocked the bot. Removing from user list.")
+                    user_ids.remove(user_id)  # Remove blocked user from the set
                 except Exception as e:
                     logger.error(f"Failed to send message to {user_id}: {e}")
             await update.message.reply_text("Message broadcasted to all users!")
@@ -179,6 +181,7 @@ async def broadcast_message(update: Update, context: CallbackContext):
             await update.message.reply_text("Please provide a message to broadcast.")
     else:
         await update.message.reply_text("Unauthorized! Only the admin can use this command.")
+
 
 # Function to handle user list display (admin only)
 async def user_list_command(update: Update, context: CallbackContext):
