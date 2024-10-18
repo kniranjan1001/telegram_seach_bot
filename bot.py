@@ -185,9 +185,14 @@ async def user_list_command(update: Update, context: CallbackContext):
         user_list = "\n".join([str(user_id) for user_id in user_ids])
         await update.message.reply_text(f"List of connected users:\n{user_list or 'No users connected.'}")
 
-# Main function to run the bot
 def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
+
+    # Set webhook URL
+    webhook_url = f"https://middleman-k8jr.onrender.com/{BOT_TOKEN}"
+    
+    # Set the webhook
+    application.bot.set_webhook(webhook_url)
 
     # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
@@ -198,11 +203,18 @@ def main() -> None:
     # Add message handler for text messages
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
     
+    # Add callback query handler for button presses
+    application.add_handler(CallbackQueryHandler(button_callback))
+
     # Get the port from the environment variable, default to 8443
     port = int(os.getenv('PORT', 8443))
 
     # Run the bot with port binding
     application.run_webhook(port=port)
+
+if __name__ == '__main__':
+    main()
+
 
 if __name__ == '__main__':
     main()
