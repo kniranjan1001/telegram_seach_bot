@@ -191,12 +191,6 @@ def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
     webhook_url = f"https://middleman-k8jr.onrender.com/{BOT_TOKEN}"
 
-    # Create an asyncio event loop to run the webhook setup
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    loop.run_until_complete(set_webhook(application))
-
     # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("search", search_command))
@@ -210,6 +204,8 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(button_callback))
 
     # Set the webhook
-    application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)),webhook_url=webhook_url, url_path=BOT_TOKEN)
+    application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)), webhook_url=webhook_url, url_path=BOT_TOKEN)
+
 if __name__ == '__main__':
     main()
+
