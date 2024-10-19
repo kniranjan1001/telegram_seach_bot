@@ -53,7 +53,7 @@ async def search_movie_in_json(movie_name: str):
 
 # Function to delete the message after a delay
 async def delete_message(context: CallbackContext):
-    job_data = context.job.context
+    job_data = context.job.data
     message_id = job_data['message_id']
     chat_id = job_data['chat_id']
     try:
