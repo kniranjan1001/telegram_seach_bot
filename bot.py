@@ -92,7 +92,8 @@ async def search_movie(update: Update, context: CallbackContext) -> None:
         logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat_id} after 60 seconds.")
         
         # Schedule message deletion after 1 minute (60 seconds)
-        context.job_queue.run_once(delete_message, 60, context={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
+        context.job_queue.run_once(delete_message, 60, data={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
+
     else:
         # Edit the loading message with the error message
         response_message = await loading_message.edit_text(result)
