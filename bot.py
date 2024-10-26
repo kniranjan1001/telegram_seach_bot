@@ -109,7 +109,7 @@ async def search_movie(update: Update, context: CallbackContext) -> None:
         # Prompt user to subscribe to the channel
         subscribe_message = (
             "🔔 To access the movie search, please subscribe to our channel first:\n"
-            f"[Join Channel](CHANNEL_USERNAME)\n And then send the name here"
+            f"[Join Channel](https://t.me/+g2buC3evDq0zODc9)\n And then send the name here"
         )
         await update.message.reply_text(subscribe_message, parse_mode="Markdown", disable_web_page_preview=True)
 
@@ -139,7 +139,7 @@ async def search_command(update: Update, context: CallbackContext) -> None:
         # Prompt user to subscribe to the channel
         subscribe_message = (
             "🔔 To access the movie search, please subscribe to our channel first:\n"
-            f"[Join Channel]({CHANNEL_USERNAME})"
+            f"[Join Channel](https://t.me/+g2buC3evDq0zODc9)\n And then send the name here"
         )
         await update.message.reply_text(subscribe_message, parse_mode="Markdown", disable_web_page_preview=True)
 # Update the start command to save user IDs
