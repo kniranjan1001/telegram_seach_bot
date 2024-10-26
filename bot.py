@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv('BOT_TOKEN')  # Your Telegram bot token
 ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID'))  # Your Telegram user ID
 JSON_URL = os.getenv('JSON_URL')  # URL where your JSON data is stored
-CHANNEL_USERNAME = "@cc_new_moviess"
+CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME')
 
 # A global set to store unique user IDs
 user_ids = set()
@@ -109,7 +109,7 @@ async def search_movie(update: Update, context: CallbackContext) -> None:
         # Prompt user to subscribe to the channel
         subscribe_message = (
             "🔔 To access the movie search, please subscribe to our channel first:\n"
-            f"[Join Channel]({CHANNEL_USERNAME})"
+            f"[Join Channel](CHANNEL_USERNAME)\n And then send the name here"
         )
         await update.message.reply_text(subscribe_message, parse_mode="Markdown", disable_web_page_preview=True)
 
