@@ -98,7 +98,7 @@ async def search_movie(update: Update, context: CallbackContext) -> None:
         result = await search_movie_in_json(movie_name)
 
         if isinstance(result, InlineKeyboardMarkup):
-            response_message = await loading_message.edit_text(f"Search🔍 results for '{movie_name}' 🍿 :", reply_markup=result)
+            response_message = await loading_message.edit_text(f"Search🔍 results for '{movie_name}' 🍿 :💀Note: Due to copyright issue search result will be deleted after 1 minute.", reply_markup=result)
             logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat_id} after 60 seconds.")
             context.job_queue.run_once(delete_message, 60, data={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
         else:
