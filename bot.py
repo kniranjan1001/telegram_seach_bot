@@ -202,7 +202,7 @@ async def user_list_command(update: Update, context: CallbackContext):
 # Function to add user ID to a file
 def save_user_id(user_id):
     # Load existing IDs to avoid duplicates
-    with open("record.txt", "a+") as file:
+    with open("./record.txt", "a+") as file:
         file.seek(0)
         existing_ids = set(file.read().splitlines())
         # If the user ID is not in the file, add it
