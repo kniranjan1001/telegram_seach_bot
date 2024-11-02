@@ -109,7 +109,7 @@ async def search_movie(update: Update, context: CallbackContext) -> None:
         # Prompt user to subscribe to the channel
         subscribe_message = (
             "🔔 To access the movie search, please subscribe to our channel first:\n"
-            f"[Join Channel](https://t.me/+g2buC3evDq0zODc9)\n And then send the name here"
+            f"[Join Channel](https://t.me/addlist/L64KNhMmYytmZWE1)\n And then send the name here"
         )
         await update.message.reply_text(subscribe_message, parse_mode="Markdown", disable_web_page_preview=True)
 
@@ -137,11 +137,15 @@ async def search_command(update: Update, context: CallbackContext) -> None:
             await update.message.reply_text("Please provide a movie name. Usage: /search <movie_name>")
     else:
         # Prompt user to subscribe to the channel
-        subscribe_message = (
-            "🔔 To access the movie search, please subscribe to our channel first:\n"
-            f"[Join Channel](https://t.me/+g2buC3evDq0zODc9)\n And then send the name here"
+        message_text = (
+        "🔔 To access the movie search, please subscribe to our channels first:\n\n ⚝After Subscribing send movie name directly ⌕"
         )
-        await update.message.reply_text(subscribe_message, parse_mode="Markdown", disable_web_page_preview=True)
+        
+        # Define the buttons
+        keyboard = [
+            [InlineKeyboardButton("Join Now", url="https://t.me/addlist/L64KNhMmYytmZWE1")]
+        ]
+        await update.message.reply_text(text=message_text,reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
 # Update the start command to save user IDs
 async def start_command(update: Update, context: CallbackContext) -> None:
     user_id = update.message.chat_id
