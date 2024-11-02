@@ -107,11 +107,16 @@ async def search_movie(update: Update, context: CallbackContext) -> None:
             context.job_queue.run_once(delete_message, 60, context={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
     else:
         # Prompt user to subscribe to the channel
-        subscribe_message = (
-            "🔔 To access the movie search, please subscribe to our channel first:\n"
-            f"[Join Channel](https://t.me/addlist/L64KNhMmYytmZWE1)\n And then send the name here"
+         # Prompt user to subscribe to the channel
+        message_text = (
+        "🔔 To access the movie search, please subscribe to our channels first:\n\n ⚝After Subscribing send movie name directly ⌕"
         )
-        await update.message.reply_text(subscribe_message, parse_mode="Markdown", disable_web_page_preview=True)
+        
+        # Define the buttons
+        keyboard = [
+            [InlineKeyboardButton("Join Now", url="https://t.me/addlist/L64KNhMmYytmZWE1")]
+        ]
+        await update.message.reply_text(text=message_text,reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
 
 # Similarly, modify the /search command handler to include the subscription check
 async def search_command(update: Update, context: CallbackContext) -> None:
