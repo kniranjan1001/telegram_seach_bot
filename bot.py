@@ -162,7 +162,7 @@ async def start_command(update: Update, context: CallbackContext) -> None:
        "\tWelcome to the Movie Search Bot! 🎬🍿\n"
        "Search🔍 for your favorite movies easily!\n"
        "Type correct movie🍿 name or use the command:\n"
-       "```\n/search <movie_name>\n "\search Jungle Cruise" Or Simply write movie name - Jungle Cruise```\n"
+       "```\n/search <movie_name>\n ie. \search Jungle Cruise Or Simply write movie name - Jungle Cruise```\n"
        "Enjoy your content😎"
     )
     await update.message.reply_text(welcome_message, reply_markup=keyboard)
