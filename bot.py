@@ -5,6 +5,7 @@ import logging
 import requests
 import os
 import asyncio
+from pymongo import MongoClient
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -15,6 +16,11 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')  # Your Telegram bot token
 ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID'))  # Your Telegram user ID
 JSON_URL = os.getenv('JSON_URL')  # URL where your JSON data is stored
 CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME')
+
+# MongoDB setup
+client = MongoClient("mongodb://harshsharma7102001:Vc2qmHrxuxlvE4I2@cluster0-shard-00-00.ug5ca.mongodb.net:27017/?authSource=admin&ssl=true")
+db = client['movie_bot']
+user_collection = db['users']
 
 # A global set to store unique user IDs
 user_ids = set()
@@ -57,7 +63,7 @@ async def search_movie_in_json(movie_name: str):
             keyboard = InlineKeyboardMarkup(inline_keyboard=[[button] for button in buttons])
             return keyboard
         else:
-            return "Movie not found! 😿 \n👉 Please check the spelling or send the exact name.\n👉 If it's still missing, kindly search @cc_new_movie 🎬"
+            return "Movie not found! 😿 \n👉 Please check the spelling or send the exact movie name.\n👉 If it's still missing, kindly search @cc_new_movie 🎬"
     except Exception as e:
         logger.error(f"Error searching movie data: {e}")
         return "An error😿 occurred while searching for the movie."
@@ -74,11 +80,22 @@ async def delete_message(context: CallbackContext):
     except Exception as e:
         logger.error(f"Failed to delete message {message_id}: {e}")
 
-# Function to store user IDs
+# Store user ID in MongoDB
+async def store_user_id(user_id, username=None, first_name=None):
+    if not user_collection.find_one({"_id": user_id}):
+        user_collection.insert_one({
+            "_id": user_id,
+            "username": username,
+            "first_name": first_name
+        })
 
 # Modified function to handle movie search requests
 async def search_movie(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
+    
+
+    # Store user ID if not already in the database
+    await store_user_id(user_id, user.username, user.first_name)
 
     # Check if user is subscribed to the channel
     if await is_user_subscribed(user_id, context):
@@ -147,7 +164,8 @@ async def search_command(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(text=message_text,reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
 # Update the start command to save user IDs
 async def start_command(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.chat_id
+    user = update.message.from_user
+    await store_user_id(user.id, user.username, user.first_name)
     about_button = InlineKeyboardButton(text="About🧑‍💻", callback_data='about')
     request_movie_button = InlineKeyboardButton(text="Request Movie😇", url='https://t.me/anonyms_middle_man_bot')
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[about_button], [request_movie_button]])
@@ -161,19 +179,59 @@ async def start_command(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text(welcome_message, reply_markup=keyboard)
     
 # Function to handle button callbacks
-async def button_callback(update: Update, context: CallbackContext) -> None:
+async def button_callback(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
-    if query.data == 'about':
+    
+    if query.data == "about":
         about_message = (
             "🤖 *About the Bot*:\n"
             "This bot allows users to search for movies by name.\n"
             "*Developer*: [Harsh](https://t.me/Harsh_Raj1)\n"
             "Use the bot to find movie links and request movies!"
         )
-        await query.edit_message_text(about_message, parse_mode="Markdown")
+        # Adding a Back button
+        back_button = InlineKeyboardButton(text="🔙 Back", callback_data='back_to_start')
+        keyboard = InlineKeyboardMarkup([[back_button]])
+        
+        await query.edit_message_text(about_message, parse_mode="Markdown", reply_markup=keyboard)
 
-# Modify the broadcast function to use user IDs from the file
+    elif query.data == "back_to_start":
+        await start_command(update, context)
+
+
+# /broadcast command to send a message to all users (admin only)
+async def broadcast_message(update: Update, context: CallbackContext):
+    user = update.message.from_user
+    if user.id != ADMIN_USER_ID:
+        await update.message.reply_text("You are not authorized to use this command.")
+        return
+    
+    if context.args:
+        broadcast_text = " ".join(context.args)
+        users = user_collection.find({}, {"_id": 1})
+        
+        sent_count = 0
+        for user in users:
+            try:
+                await context.bot.send_message(chat_id=user['_id'], text=broadcast_text)
+                sent_count += 1
+            except Exception as e:
+                logger.error(f"Error sending message to user {user['_id']}: {e}")
+        
+        await update.message.reply_text(f"Broadcast sent to {sent_count} users.")
+    else:
+        await update.message.reply_text("Usage: /broadcast <message>")
+
+# /userlist command to show the total number of users
+async def user_list_command(update: Update, context: CallbackContext):
+    user = update.message.from_user
+    if user.id != ADMIN_USER_ID:
+        await update.message.reply_text("You are not authorized to use this command.")
+        return
+    
+    user_count = user_collection.count_documents({})
+    await update.message.reply_text(f"Total registered users: {user_count}")
 
 
 
@@ -193,8 +251,8 @@ def main() -> None:
     # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("search", search_command))
-    # application.add_handler(CommandHandler("broadcast", broadcast_message))
-    # application.add_handler(CommandHandler("userlist", user_list_command))
+    application.add_handler(CommandHandler("broadcast", broadcast_message))
+    application.add_handler(CommandHandler("userlist", user_list_command))
     
     # Add message handler for text messages
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
