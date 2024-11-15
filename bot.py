@@ -200,7 +200,23 @@ async def button_callback(update: Update, context: CallbackContext):
         await query.edit_message_text(about_message, parse_mode="Markdown", reply_markup=keyboard)
 
     elif query.data == "back_to_start":
-        await start_command(update, context)
+        # Send the same message as /start
+        user = update.callback_query.from_user
+        about_button = InlineKeyboardButton(text="About🧑‍💻", callback_data='about')
+        request_movie_button = InlineKeyboardButton(text="Request Movie😇", url='https://t.me/anonyms_middle_man_bot')
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[[about_button], [request_movie_button]])
+
+        welcome_message = (
+            "Welcome to the Movie Search Bot! 🎬🍿\n"
+            "Type the movie name directly or use the command:\n"
+            "/search <movie_name>\n"
+            "or send movie name directly🔍\n"
+            "Enjoy your content😎"
+        )
+
+        # Use the callback_query.message to edit the message with the same content as /start
+        await query.message.edit_text(welcome_message, reply_markup=keyboard)
+
 
 
 # /broadcast command to send a message to all users (admin only)
