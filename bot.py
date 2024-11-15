@@ -75,15 +75,9 @@ async def delete_message(context: CallbackContext):
         logger.error(f"Failed to delete message {message_id}: {e}")
 
 # Function to store user IDs
-async def add_user_id(update: Update):
-    user_id = update.message.chat_id
-    if user_id not in user_ids:
-        user_ids.add(user_id)
-        logger.info(f"New user added: {user_id}")
 
 # Modified function to handle movie search requests
 async def search_movie(update: Update, context: CallbackContext) -> None:
-    await add_user_id(update)
     user_id = update.message.from_user.id
 
     # Check if user is subscribed to the channel
@@ -154,7 +148,6 @@ async def search_command(update: Update, context: CallbackContext) -> None:
 # Update the start command to save user IDs
 async def start_command(update: Update, context: CallbackContext) -> None:
     user_id = update.message.chat_id
-    save_user_id(user_id)  # Save user ID to file
     about_button = InlineKeyboardButton(text="About🧑‍💻", callback_data='about')
     request_movie_button = InlineKeyboardButton(text="Request Movie😇", url='https://t.me/anonyms_middle_man_bot')
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[about_button], [request_movie_button]])
@@ -181,50 +174,17 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         await query.edit_message_text(about_message, parse_mode="Markdown")
 
 # Modify the broadcast function to use user IDs from the file
-async def broadcast_message(update: Update, context: CallbackContext):
-    if update.message.chat_id == ADMIN_USER_ID:
-        message = " ".join(context.args)
-        if message:
-            user_ids = load_user_ids()  # Load user IDs from file
-            for user_id in user_ids:
-                try:
-                    await context.bot.send_message(chat_id=user_id, text=message)
-                except Exception as e:
-                    logger.error(f"Failed to send message to {user_id}: {e}")
-            await update.message.reply_text("Message broadcasted to all users!")
-        else:
-            await update.message.reply_text("Please provide a message to broadcast.")
-    else:
-        await update.message.reply_text("Unauthorized! Only the admin can use this command.")
+
 
 
 
 # Update the user list function to show users from the file
-async def user_list_command(update: Update, context: CallbackContext):
-    if update.message.chat_id == ADMIN_USER_ID:
-        user_ids = load_user_ids()  # Load user IDs from file
-        user_list = "\n".join(map(str, user_ids))
-        await update.message.reply_text(f"List of connected users:\n{user_list or 'No users connected.'}\nTotal count: {len(user_ids)}")
-    else:
-        await update.message.reply_text("Unauthorized! Only the admin can use this command.")
 
 # Function to add user ID to a file without duplicates
-def save_user_id(user_id):
-    with open("record.txt", "a+") as file:
-        file.seek(0)
-        existing_ids = set(file.read().splitlines())
-        if str(user_id) not in existing_ids:
-            file.write(f"{user_id}\n")
-            logger.info(f"New user added to file: {user_id}")
 
 
 # Function to load all user IDs from the file
-def load_user_ids():
-    try:
-        with open("users.txt", "r") as file:
-            return set(map(int, file.read().splitlines()))  # Convert to integer set for use in broadcasting
-    except FileNotFoundError:
-        return set()
+
 
 def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
@@ -233,8 +193,8 @@ def main() -> None:
     # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("search", search_command))
-    application.add_handler(CommandHandler("broadcast", broadcast_message))
-    application.add_handler(CommandHandler("userlist", user_list_command))
+    # application.add_handler(CommandHandler("broadcast", broadcast_message))
+    # application.add_handler(CommandHandler("userlist", user_list_command))
     
     # Add message handler for text messages
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
