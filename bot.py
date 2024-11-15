@@ -18,7 +18,8 @@ JSON_URL = os.getenv('JSON_URL')  # URL where your JSON data is stored
 CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME')
 
 # MongoDB setup
-client = MongoClient("mongodb://harshsharma7102001:Vc2qmHrxuxlvE4I2@cluster0-shard-00-00.ug5ca.mongodb.net:27017/?authSource=admin&ssl=true")
+MONGO_URL = os.getenv('MONGO_URI');
+client = MongoClient(MONGO_URL);
 db = client['movie_bot']
 user_collection = db['users']
 
@@ -164,7 +165,10 @@ async def search_command(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(text=message_text,reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
 # Update the start command to save user IDs
 async def start_command(update: Update, context: CallbackContext) -> None:
-    user = update.message.from_user
+    if update.message is None:
+        return  # If there's no message, just return and do nothing
+    
+    user = update.message.from_user  # This will now safely access 'from_user'
     await store_user_id(user.id, user.username, user.first_name)
     about_button = InlineKeyboardButton(text="About🧑‍💻", callback_data='about')
     request_movie_button = InlineKeyboardButton(text="Request Movie😇", url='https://t.me/anonyms_middle_man_bot')
