@@ -92,9 +92,8 @@ async def store_user_id(user_id, username=None, first_name=None):
 
 # Modified function to handle movie search requests
 async def search_movie(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
-    
-
+    user = update.message.from_user
+    user_id = user.id
     # Store user ID if not already in the database
     await store_user_id(user_id, user.username, user.first_name)
 
