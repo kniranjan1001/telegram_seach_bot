@@ -49,6 +49,14 @@ def fetch_movie_data():
 # Function to search movie in JSON data and provide recommendations if not found
 async def search_movie_in_json(update, context, movie_name: str):
     try:
+        query = update.callback_query
+        if query and query.data == "back_to_search":
+            # If the back button is clicked, prompt user to search again
+            await query.answer()
+            search_again_message = "Search for another movie, simply send me the movie name here 🎬"
+            await query.edit_message_text(search_again_message)
+            return
+
         # Fetch movie data from the JSON URL
         movie_data = fetch_movie_data()
 
@@ -92,16 +100,6 @@ async def search_movie_in_json(update, context, movie_name: str):
         logger.error(f"Error searching movie data: {e}")
         await update.message.reply_text("An error😿 occurred while searching for the movie.")
 
-# Function to handle the "Back" button callback
-async def back_to_search(update, context):
-    query = update.callback_query
-    await query.answer()
-
-    # Message prompting the user to search again
-    search_again_message = "Search for another movie, simply send me the movie name here 🎬"
-    
-    # Sending the message
-    await query.edit_message_text(search_again_message)
 
 # Function to delete the message after a delay
 async def delete_message(context: CallbackContext):
@@ -313,9 +311,6 @@ def main() -> None:
     
     # Add callback query handler for button presses
     application.add_handler(CallbackQueryHandler(button_callback))
-
-    # Add the handler for the "Back" button callback
-    application.add_handler(CallbackQueryHandler(back_to_search, pattern='back_to_search'))
 
     # Set the webhook
     application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)), webhook_url=webhook_url, url_path=BOT_TOKEN)
