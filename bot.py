@@ -54,45 +54,29 @@ async def search_movie_in_json(movie_name: str):
         # Fetch movie data from the JSON URL
         movie_data = fetch_movie_data()
 
-        # Initialize a list to hold button objects for exact matches
-        exact_buttons = []
+        # Initialize a list to hold button objects
+        buttons = []
 
-        # Iterate through movie data to find exact matches
-        for key, value in movie_data.items():
-            if movie_name.lower() in key.lower():
-                exact_buttons.append(InlineKeyboardButton(text=key, url=value))
+        # Use fuzzywuzzy to find the closest matches
+        movie_names = list(movie_data.keys())
+        closest_matches = process.extract(movie_name, movie_names, limit=4)  # Limit to top 4 matches
 
-        # Create the inline keyboard markup for exact matches
-        if exact_buttons:
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[[button] for button in exact_buttons])
+        if closest_matches:
+            # Create buttons for the top 4 closest matches
+            for match in closest_matches:
+                movie_title = match[0]  # The matched movie title
+                movie_url = movie_data[movie_title]  # The associated URL from JSON data
+                buttons.append(InlineKeyboardButton(text=movie_title, url=movie_url))
+
+            # Create the inline keyboard markup
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[[button] for button in buttons])
             return keyboard
         else:
-            # If no exact match, use fuzzy matching to find similar movies
-            # Get the top 5 closest matches to the query
-            movie_titles = list(movie_data.keys())
-            similar_matches = process.extractBests(movie_name, movie_titles, limit=5, scorer=None)
-            
-            # Prepare recommendation buttons based on similar matches
-            recommendation_buttons = []
-            for match in similar_matches:
-                movie_title = match[0]
-                if movie_title in movie_data:
-                    recommendation_buttons.append(InlineKeyboardButton(text=movie_title, url=movie_data[movie_title]))
-
-            # Select 3-4 random recommendations if available, else use what we have
-            recommendations = random.sample(recommendation_buttons, min(4, len(recommendation_buttons)))
-
-            # Create an inline keyboard with the recommendations
-            if recommendations:
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[[button] for button in recommendations])
-                return keyboard
-            else:
-                # Return a fallback message if no recommendations found
-                return "Oops, couldn't find any similar movies! 😿\n🔍 Double-check the spelling or try another name.\n💡 Still no luck? Request your movie here @anonyms_middle_man_bot! 🎥✨"
-
+            return "Oops, couldn't find any matching movies! 😿 \n🔍 Double-check the spelling or try using a more specific movie name.\n💡 Still no luck? Request your movie here @anonyms_middle_man_bot! 🎥✨"
     except Exception as e:
         logger.error(f"Error searching movie data: {e}")
         return "An error😿 occurred while searching for the movie."
+
         
 # Function to delete the message after a delay
 async def delete_message(context: CallbackContext):
