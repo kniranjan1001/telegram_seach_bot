@@ -5,6 +5,7 @@ import logging
 import requests
 import os
 import asyncio
+import random
 from pymongo import MongoClient
 
 # Set up logging
@@ -45,7 +46,7 @@ def fetch_movie_data():
         logger.error(f"Error fetching data from JSON URL: {e}")
         return {}
 
-# Function to search for the movie in the JSON data
+# Function to search movie in JSON data and provide recommendations if not found
 async def search_movie_in_json(movie_name: str):
     try:
         # Fetch movie data from the JSON URL
@@ -54,20 +55,52 @@ async def search_movie_in_json(movie_name: str):
         # Initialize a list to hold button objects
         buttons = []
 
-        # Iterate through movie data and create buttons
+        # Iterate through movie data and create buttons for matching movies
         for key, value in movie_data.items():
             if movie_name.lower() in key.lower():
                 buttons.append(InlineKeyboardButton(text=key, url=value))
 
-        # Create the inline keyboard markup
+        # If matching movies are found
         if buttons:
             keyboard = InlineKeyboardMarkup(inline_keyboard=[[button] for button in buttons])
             return keyboard
         else:
-            return "Oops, couldn't find the movie you're looking for! 😿 \n🔍 Double-check the spelling or try the exact movie name.\n💡 Still no luck? Request your movie here @anonyms_middle_man_bot! 🎥✨"
+            # If no matching movie is found, provide 3-4 random recommendations
+            random_movies = random.sample(list(movie_data.items()), min(4, len(movie_data)))
+            recommendation_buttons = [
+                InlineKeyboardButton(text=movie, url=url) for movie, url in random_movies
+            ]
+
+            # Adding a Back button to return to the search prompt
+            back_button = InlineKeyboardButton(text="🔙 Back", callback_data='back_to_search')
+            recommendation_buttons.append(back_button)
+
+            # Create the inline keyboard markup with recommendations
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[[button] for button in recommendation_buttons]
+            )
+
+            # Return the message and keyboard
+            return (
+                "Oops, couldn't find the movie you're looking for! 😿\n"
+                "🔍 Double-check the spelling or try the exact movie name.\n"
+                "💡 Here are some other movie recommendations you might like:",
+                keyboard
+            )
     except Exception as e:
         logger.error(f"Error searching movie data: {e}")
         return "An error😿 occurred while searching for the movie."
+
+# Function to handle the "Back" button callback
+async def back_to_search(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    # Message prompting the user to search again
+    search_again_message = "Search for another movie, simply send me the movie name here 🎬"
+    
+    # Sending the message
+    await query.edit_message_text(search_again_message)
 
 # Function to delete the message after a delay
 async def delete_message(context: CallbackContext):
@@ -278,6 +311,9 @@ def main() -> None:
     
     # Add callback query handler for button presses
     application.add_handler(CallbackQueryHandler(button_callback))
+
+    # Add the handler for the "Back" button callback
+    application.add_handler(CallbackQueryHandler(back_to_search, pattern='back_to_search'))
 
     # Set the webhook
     application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)), webhook_url=webhook_url, url_path=BOT_TOKEN)
