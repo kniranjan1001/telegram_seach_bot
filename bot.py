@@ -6,6 +6,7 @@ import requests
 import os
 import asyncio
 import random
+from fuzzywuzzy import process
 from pymongo import MongoClient
 
 # Set up logging
