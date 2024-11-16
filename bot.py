@@ -140,7 +140,8 @@ async def search_movie(update: Update, context: CallbackContext) -> None:
         loading_message = await update.message.reply_text("🔍 Searching the movie vaults... 🍿 Hang tight while we find your movie! 🎬")
 
         # Search for the movie in the JSON data
-        result = await search_movie_in_json(movie_name)
+        # Call the search function with update, context, and movie_name
+        result = await search_movie_in_json(update, context, movie_name)
 
         if isinstance(result, InlineKeyboardMarkup):
             response_message = await loading_message.edit_text(f"Search🔍 results for '{movie_name}' 🍿 :💀Note: Due to copyright issue search result will be deleted after 1 minute.", reply_markup=result)
