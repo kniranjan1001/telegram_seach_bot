@@ -47,60 +47,52 @@ def fetch_movie_data():
         return {}
 
 # Function to search movie in JSON data and provide recommendations if not found
-async def search_movie_in_json(update, context, movie_name: str):
+# Function to search for the movie in the JSON data
+async def search_movie_in_json(movie_name: str):
     try:
-        query = update.callback_query
-        if query and query.data == "back_to_search":
-            # If the back button is clicked, prompt user to search again
-            await query.answer()
-            search_again_message = "Search for another movie, simply send me the movie name here 🎬"
-            await query.edit_message_text(search_again_message)
-            return
-
         # Fetch movie data from the JSON URL
         movie_data = fetch_movie_data()
 
-        # Initialize a list to hold button objects
-        buttons = []
+        # Initialize a list to hold button objects for exact matches
+        exact_buttons = []
 
-        # Iterate through movie data and create buttons for matching movies
+        # Iterate through movie data to find exact matches
         for key, value in movie_data.items():
             if movie_name.lower() in key.lower():
-                buttons.append([InlineKeyboardButton(text=key, url=value)])
+                exact_buttons.append(InlineKeyboardButton(text=key, url=value))
 
-        # If matching movies are found
-        if buttons:
-            keyboard = InlineKeyboardMarkup(buttons)
-            await update.message.reply_text(
-                "Here are the search results:",
-                reply_markup=keyboard
-            )
+        # Create the inline keyboard markup for exact matches
+        if exact_buttons:
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[[button] for button in exact_buttons])
+            return keyboard
         else:
-            # If no matching movie is found, provide 3-4 random recommendations
-            random_movies = random.sample(list(movie_data.items()), min(4, len(movie_data)))
-            recommendation_buttons = [
-                [InlineKeyboardButton(text=movie, url=url)] for movie, url in random_movies
-            ]
+            # If no exact match, use fuzzy matching to find similar movies
+            # Get the top 5 closest matches to the query
+            movie_titles = list(movie_data.keys())
+            similar_matches = process.extractBests(movie_name, movie_titles, limit=5, scorer=None)
+            
+            # Prepare recommendation buttons based on similar matches
+            recommendation_buttons = []
+            for match in similar_matches:
+                movie_title = match[0]
+                if movie_title in movie_data:
+                    recommendation_buttons.append(InlineKeyboardButton(text=movie_title, url=movie_data[movie_title]))
 
-            # Adding a Back button to return to the search prompt
-            recommendation_buttons.append([InlineKeyboardButton(text="🔙 Back", callback_data='back_to_search')])
+            # Select 3-4 random recommendations if available, else use what we have
+            recommendations = random.sample(recommendation_buttons, min(4, len(recommendation_buttons)))
 
-            # Create the inline keyboard markup with recommendations
-            keyboard = InlineKeyboardMarkup(recommendation_buttons)
-
-            # Send the message with recommendations and keyboard
-            await update.message.reply_text(
-                "Oops, couldn't find the movie you're looking for! 😿\n"
-                "🔍 Double-check the spelling or try the exact movie name.\n"
-                "💡 Here are some other movie recommendations you might like:",
-                reply_markup=keyboard
-            )
+            # Create an inline keyboard with the recommendations
+            if recommendations:
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[[button] for button in recommendations])
+                return keyboard
+            else:
+                # Return a fallback message if no recommendations found
+                return "Oops, couldn't find any similar movies! 😿\n🔍 Double-check the spelling or try another name.\n💡 Still no luck? Request your movie here @anonyms_middle_man_bot! 🎥✨"
 
     except Exception as e:
         logger.error(f"Error searching movie data: {e}")
-        await update.message.reply_text("An error😿 occurred while searching for the movie.")
-
-
+        return "An error😿 occurred while searching for the movie."
+        
 # Function to delete the message after a delay
 async def delete_message(context: CallbackContext):
     job_data = context.job.data
@@ -139,7 +131,7 @@ async def search_movie(update: Update, context: CallbackContext) -> None:
 
         # Search for the movie in the JSON data
         # Call the search function with update, context, and movie_name
-        result = await search_movie_in_json(update, context, movie_name)
+        result = await search_movie_in_json(movie_name)
 
         if isinstance(result, InlineKeyboardMarkup):
             response_message = await loading_message.edit_text(f"Search🔍 results for '{movie_name}' 🍿 :💀Note: Due to copyright issue search result will be deleted after 1 minute.", reply_markup=result)
