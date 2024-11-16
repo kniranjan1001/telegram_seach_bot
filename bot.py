@@ -47,7 +47,7 @@ def fetch_movie_data():
         return {}
 
 # Function to search movie in JSON data and provide recommendations if not found
-async def search_movie_in_json(movie_name: str):
+async def search_movie_in_json(update, context, movie_name: str):
     try:
         # Fetch movie data from the JSON URL
         movie_data = fetch_movie_data()
@@ -58,41 +58,42 @@ async def search_movie_in_json(movie_name: str):
         # Iterate through movie data and create buttons for matching movies
         for key, value in movie_data.items():
             if movie_name.lower() in key.lower():
-                buttons.append(InlineKeyboardButton(text=key, url=value))
+                buttons.append([InlineKeyboardButton(text=key, url=value)])
 
         # If matching movies are found
         if buttons:
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[[button] for button in buttons])
-            return keyboard
+            keyboard = InlineKeyboardMarkup(buttons)
+            await update.message.reply_text(
+                "Here are the search results:",
+                reply_markup=keyboard
+            )
         else:
             # If no matching movie is found, provide 3-4 random recommendations
             random_movies = random.sample(list(movie_data.items()), min(4, len(movie_data)))
             recommendation_buttons = [
-                InlineKeyboardButton(text=movie, url=url) for movie, url in random_movies
+                [InlineKeyboardButton(text=movie, url=url)] for movie, url in random_movies
             ]
 
             # Adding a Back button to return to the search prompt
-            back_button = InlineKeyboardButton(text="🔙 Back", callback_data='back_to_search')
-            recommendation_buttons.append(back_button)
+            recommendation_buttons.append([InlineKeyboardButton(text="🔙 Back", callback_data='back_to_search')])
 
             # Create the inline keyboard markup with recommendations
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[[button] for button in recommendation_buttons]
-            )
+            keyboard = InlineKeyboardMarkup(recommendation_buttons)
 
-            # Return the message and keyboard
-            return (
+            # Send the message with recommendations and keyboard
+            await update.message.reply_text(
                 "Oops, couldn't find the movie you're looking for! 😿\n"
                 "🔍 Double-check the spelling or try the exact movie name.\n"
                 "💡 Here are some other movie recommendations you might like:",
-                keyboard
+                reply_markup=keyboard
             )
+
     except Exception as e:
         logger.error(f"Error searching movie data: {e}")
-        return "An error😿 occurred while searching for the movie."
+        await update.message.reply_text("An error😿 occurred while searching for the movie.")
 
 # Function to handle the "Back" button callback
-async def back_to_search(update: Update, context: CallbackContext):
+async def back_to_search(update, context):
     query = update.callback_query
     await query.answer()
 
