@@ -59,7 +59,7 @@ async def search_movie_in_json(movie_name: str):
 
         # Use fuzzywuzzy to find the closest matches
         movie_names = list(movie_data.keys())
-        closest_matches = process.extract(movie_name, movie_names, limit=4)  # Limit to top 4 matches
+        closest_matches = process.extract(movie_name, movie_names, limit=6)  # Limit to top 4 matches
 
         if closest_matches:
             # Create buttons for the top 4 closest matches
