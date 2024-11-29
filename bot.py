@@ -4,46 +4,94 @@ from telegram.constants import ChatMemberStatus
 import logging
 import requests
 import os
+import asyncio
+import random
 from fuzzywuzzy import process
 from pymongo import MongoClient
 
-# Logging setup
+# Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID'))
-JSON_URL = os.getenv('JSON_URL')
+BOT_TOKEN = os.getenv('BOT_TOKEN')  # Your Telegram bot token
+ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID'))  # Your Telegram user ID
+JSON_URL = os.getenv('JSON_URL')  # URL where your JSON data is stored
 CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME')
 
 # MongoDB setup
-MONGO_URL = os.getenv('MONGO_URI')
-client = MongoClient(MONGO_URL)
+MONGO_URL = os.getenv('MONGO_URI');
+client = MongoClient(MONGO_URL);
 db = client['movie_bot']
 user_collection = db['users']
 
-# Helper: Fetch movie data
-def fetch_movie_data():
-    try:
-        response = requests.get(JSON_URL)
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        logger.error(f"Error fetching JSON data: {e}")
-        return {}
+# A global set to store unique user IDs
+user_ids = set()
 
-# Helper: Check user subscription
-async def is_user_subscribed(user_id, context):
+# Function to check if a user is subscribed to the channel
+async def is_user_subscribed(user_id: int, context: CallbackContext) -> bool:
     try:
         member_status = await context.bot.get_chat_member(CHANNEL_USERNAME, user_id)
         return member_status.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
     except Exception as e:
-        logger.warning(f"Failed to check subscription status for user {user_id}: {e}")
+        logger.error(f"Error checking subscription status: {e}")
         return False
 
-# Helper: Store user in MongoDB
-def store_user(user_id, username=None, first_name=None):
+# Function to fetch movie data from JSON URL
+def fetch_movie_data():
+    try:
+        response = requests.get(JSON_URL)
+        response.raise_for_status()  # Raise an error for bad responses
+        return response.json()  # Return the JSON data as a dictionary
+    except requests.RequestException as e:
+        logger.error(f"Error fetching data from JSON URL: {e}")
+        return {}
+
+# Function to search movie in JSON data and provide recommendations if not found
+# Function to search for the movie in the JSON data
+async def search_movie_in_json(movie_name: str):
+    try:
+        # Fetch movie data from the JSON URL
+        movie_data = fetch_movie_data()
+
+        # Initialize a list to hold button objects
+        buttons = []
+
+        # Use fuzzywuzzy to find the closest matches
+        movie_names = list(movie_data.keys())
+        closest_matches = process.extract(movie_name, movie_names, limit=6)  # Limit to top 4 matches
+
+        if closest_matches:
+            # Create buttons for the top 4 closest matches
+            for match in closest_matches:
+                movie_title = match[0]  # The matched movie title
+                movie_url = movie_data[movie_title]  # The associated URL from JSON data
+                buttons.append(InlineKeyboardButton(text=movie_title, url=movie_url))
+
+            # Create the inline keyboard markup
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[[button] for button in buttons])
+            return keyboard
+        else:
+            return "Oops, couldn't find any matching movies! 😿 \n🔍 Double-check the spelling or try using a more specific movie name.\n💡 Still no luck? Request your movie here @anonyms_middle_man_bot! 🎥✨"
+    except Exception as e:
+        logger.error(f"Error searching movie data: {e}")
+        return "An error😿 occurred while searching for the movie."
+
+        
+# Function to delete the message after a delay
+async def delete_message(context: CallbackContext):
+    job_data = context.job.data
+    message_id = job_data['message_id']
+    chat_id = job_data['chat_id']
+    try:
+        logger.info(f"Deleting message {message_id} from chat {chat_id}")
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+        logger.info(f"Message {message_id} deleted successfully.")
+    except Exception as e:
+        logger.error(f"Failed to delete message {message_id}: {e}")
+
+# Store user ID in MongoDB
+async def store_user_id(user_id, username=None, first_name=None):
     if not user_collection.find_one({"_id": user_id}):
         user_collection.insert_one({
             "_id": user_id,
@@ -51,121 +99,198 @@ def store_user(user_id, username=None, first_name=None):
             "first_name": first_name
         })
 
-# Helper: Generate search response
-async def generate_search_response(movie_name):
-    movie_data = fetch_movie_data()
-    movie_names = list(movie_data.keys())
-    matches = process.extract(movie_name, movie_names, limit=4)
-    
-    if matches:
-        buttons = [InlineKeyboardButton(text=match[0], url=movie_data[match[0]]) for match in matches]
-        return InlineKeyboardMarkup([[button] for button in buttons])
-    return "No matching movies found. Try again or request here: @anonyms_middle_man_bot!"
-
-# Function: Delete message
-async def delete_message(context):
-    job_data = context.job.data
-    try:
-        await context.bot.delete_message(chat_id=job_data['chat_id'], message_id=job_data['message_id'])
-    except Exception as e:
-        logger.error(f"Failed to delete message {job_data['message_id']}: {e}")
-
-# Command: /start
-async def start_command(update, context):
+# Modified function to handle movie search requests
+async def search_movie(update: Update, context: CallbackContext) -> None:
     user = update.message.from_user
-    store_user(user.id, user.username, user.first_name)
-    buttons = [
-        [InlineKeyboardButton("About 🧑‍💻", callback_data='about')],
-        [InlineKeyboardButton("Request Movie 😇", url='https://t.me/anonyms_middle_man_bot')]
-    ]
-    welcome_message = (
-        "🎬 Welcome to the Movie Search Bot! 🍿\n"
-        "Search for your favorite movies easily:\n"
-        "`/search <movie_name>` or type the movie name directly.\n"
-        "Enjoy your content! 😎"
-    )
-    await update.message.reply_text(welcome_message, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+    user_id = user.id
+    # Store user ID if not already in the database
+    await store_user_id(user_id, user.username, user.first_name)
 
-# Command: /search
-async def search_command(update, context):
-    user = update.message.from_user
-    if not await is_user_subscribed(user.id, context):
-        return await prompt_subscription(update)
-    
-    if not context.args:
-        return await update.message.reply_text("Usage: /search <movie_name>")
-    
-    movie_name = " ".join(context.args)
-    await send_search_results(update, context, movie_name)
+    # Check if user is subscribed to the channel
+    if await is_user_subscribed(user_id, context):
+        movie_name = update.message.text.strip()
+        await context.bot.send_chat_action(chat_id=update.message.chat_id, action='typing')
 
-# Function: Handle movie search
-async def send_search_results(update, context, movie_name):
-    loading_message = await update.message.reply_text("🔍 Searching... 🍿")
-    result = await generate_search_response(movie_name)
-    if isinstance(result, InlineKeyboardMarkup):
-        message = await loading_message.edit_text(f"Results for '{movie_name}':", reply_markup=result)
-        context.job_queue.run_once(delete_message, 60, data={'message_id': message.message_id, 'chat_id': update.message.chat_id})
+        # Send a creative message with simulated loading
+        loading_message = await update.message.reply_text("🔍 Searching the movie vaults... 🍿 Hang tight while we find your movie! 🎬")
+
+        # Search for the movie in the JSON data
+        # Call the search function with update, context, and movie_name
+        result = await search_movie_in_json(movie_name)
+
+        if isinstance(result, InlineKeyboardMarkup):
+            response_message = await loading_message.edit_text(f"Search🔍 results for '{movie_name}' 🍿 :💀Note: Due to copyright issue search result will be deleted after 1 minute.", reply_markup=result)
+            logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat_id} after 60 seconds.")
+            context.job_queue.run_once(delete_message, 60, data={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
+        else:
+            response_message = await loading_message.edit_text(result)
+            logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat_id} after 60 seconds.")
+            context.job_queue.run_once(delete_message, 60, context={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
     else:
-        await loading_message.edit_text(result)
+        # Prompt user to subscribe to the channel
+         # Prompt user to subscribe to the channel
+        message_text = (
+        "🔔 To access the movie search, please subscribe to our channels first:\n\n ⚝After Subscribing send movie name directly ⌕"
+        )
+        
+        # Define the buttons
+        keyboard = [
+            [InlineKeyboardButton("Join Now", url="https://t.me/addlist/4LAlWDoYvHk2ZDdl")]
+        ]
+        await update.message.reply_text(text=message_text,reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
 
-# Prompt subscription
-async def prompt_subscription(update):
-    message = (
-        "🔔 To access the movie search, please subscribe to our channel:\n"
-        "⚝ After subscribing, send the movie name directly. ⌕"
+# Similarly, modify the /search command handler to include the subscription check
+async def search_command(update: Update, context: CallbackContext) -> None:
+    user_id = update.message.from_user.id
+
+    # Check if user is subscribed to the channel
+    if await is_user_subscribed(user_id, context):
+        if context.args:
+            movie_name = " ".join(context.args).strip()
+            await context.bot.send_chat_action(chat_id=update.message.chat_id, action='typing')
+            loading_message = await update.message.reply_text("🔍 Crunching through the movie vault... 🍿 Please hold on while we grab your movie magic! 🎥")
+            movie_result = await search_movie_in_json(movie_name)
+
+            if isinstance(movie_result, InlineKeyboardMarkup):
+                response_message = await loading_message.edit_text(f"Search 🔍 results for '{movie_name}'🍿: \n\n💀Note: Due to copyright issue move will be deleted after 1 minute.", reply_markup=movie_result)
+                logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat_id} after 60 seconds.")
+                context.job_queue.run_once(delete_message, 60, context={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
+            else:
+                response_message = await loading_message.edit_text(movie_result)
+                logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat_id} after 60 seconds.")
+                context.job_queue.run_once(delete_message, 60, context={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
+        else:
+            await update.message.reply_text("Please provide a movie name. Usage: /search <movie_name>")
+    else:
+        # Prompt user to subscribe to the channel
+        message_text = (
+        "🔔 To access the movie search, please subscribe to our channels first:\n\n ⚝After Subscribing send movie name directly ⌕"
+        )
+        
+        # Define the buttons
+        keyboard = [
+            [InlineKeyboardButton("Join Now", url="https://t.me/addlist/4LAlWDoYvHk2ZDdl")]
+        ]
+        await update.message.reply_text(text=message_text,reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
+# Update the start command to save user IDs
+async def start_command(update: Update, context: CallbackContext) -> None:
+    if update.message is None:
+        return  # If there's no message, just return and do nothing
+    
+    user = update.message.from_user  # This will now safely access 'from_user'
+    await store_user_id(user.id, user.username, user.first_name)
+    about_button = InlineKeyboardButton(text="About🧑‍💻", callback_data='about')
+    request_movie_button = InlineKeyboardButton(text="Request Movie😇", url='https://t.me/anonyms_middle_man_bot')
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[about_button], [request_movie_button]])
+    welcome_message = (
+       "\tWelcome to the Movie Search Bot! 🎬🍿\n"
+       "Search🔍 for your favorite movies easily!\n"
+       "Type correct movie🍿 name or use the command:\n"
+       "```\n/search <movie_name>\n ie. \search Jungle Cruise Or Simply write movie name - Jungle Cruise```\n"
+       "Enjoy your content😎"
     )
-    keyboard = [[InlineKeyboardButton("Join Now", url="https://t.me/addlist/4LAlWDoYvHk2ZDdl")]]
-    await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
-
-# Callback: Button actions
-async def button_callback(update, context):
+    await update.message.reply_text(welcome_message, reply_markup=keyboard)
+    
+# Function to handle button callbacks
+async def button_callback(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
     
     if query.data == "about":
         about_message = (
             "🤖 *About the Bot*:\n"
-            "Search for movies by name.\n"
-            "*Developer*: [Harsh](https://t.me/Harsh_Raj1)"
+            "This bot allows users to search for movies by name.\n"
+            "*Developer*: [Harsh](https://t.me/Harsh_Raj1)\n"
+            "Use the bot to find movie links and request movies!"
         )
-        back_button = InlineKeyboardButton("🔙 Back", callback_data='back_to_start')
-        await query.edit_message_text(about_message, reply_markup=InlineKeyboardMarkup([[back_button]]), parse_mode="Markdown")
+        # Adding a Back button
+        back_button = InlineKeyboardButton(text="🔙 Back", callback_data='back_to_start')
+        keyboard = InlineKeyboardMarkup([[back_button]])
+        
+        await query.edit_message_text(about_message, parse_mode="Markdown", reply_markup=keyboard)
+
     elif query.data == "back_to_start":
-        await start_command(update, context)
+        # Send the same message as /start
+        user = update.callback_query.from_user
+        about_button = InlineKeyboardButton(text="About🧑‍💻", callback_data='about')
+        request_movie_button = InlineKeyboardButton(text="Request Movie😇", url='https://t.me/anonyms_middle_man_bot')
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[[about_button], [request_movie_button]])
 
-# Command: /broadcast
-async def broadcast_message(update, context):
-    if update.message.from_user.id != ADMIN_USER_ID:
-        return await update.message.reply_text("Unauthorized.")
-    if not context.args:
-        return await update.message.reply_text("Usage: /broadcast <message>")
+        welcome_message = (
+            "Welcome to the Movie Search Bot! 🎬🍿\n"
+            "Type the movie name directly or use the command:\n"
+            "/search <movie_name>\n"
+            "or send movie name directly🔍\n"
+            "Enjoy your content😎"
+        )
+
+        # Use the callback_query.message to edit the message with the same content as /start
+        await query.message.edit_text(welcome_message, reply_markup=keyboard)
+
+
+
+# /broadcast command to send a message to all users (admin only)
+async def broadcast_message(update: Update, context: CallbackContext):
+    user = update.message.from_user
+    if user.id != ADMIN_USER_ID:
+        await update.message.reply_text("You are not authorized to use this command.")
+        return
     
-    broadcast_text = " ".join(context.args)
-    users = user_collection.find({}, {"_id": 1})
-    for user in users:
-        try:
-            await context.bot.send_message(chat_id=user["_id"], text=broadcast_text)
-        except Exception as e:
-            logger.warning(f"Failed to send message to user {user['_id']}: {e}")
+    if context.args:
+        broadcast_text = " ".join(context.args)
+        users = user_collection.find({}, {"_id": 1})
+        
+        sent_count = 0
+        for user in users:
+            try:
+                await context.bot.send_message(chat_id=user['_id'], text=broadcast_text)
+                sent_count += 1
+            except Exception as e:
+                logger.error(f"Error sending message to user {user['_id']}: {e}")
+        
+        await update.message.reply_text(f"Broadcast sent to {sent_count} users.")
+    else:
+        await update.message.reply_text("Usage: /broadcast <message>")
 
-# Command: /userlist
-async def user_list_command(update, context):
-    if update.message.from_user.id != ADMIN_USER_ID:
-        return await update.message.reply_text("Unauthorized.")
+# /userlist command to show the total number of users
+async def user_list_command(update: Update, context: CallbackContext):
+    user = update.message.from_user
+    if user.id != ADMIN_USER_ID:
+        await update.message.reply_text("You are not authorized to use this command.")
+        return
+    
     user_count = user_collection.count_documents({})
-    await update.message.reply_text(f"Total users: {user_count}")
+    await update.message.reply_text(f"Total registered users: {user_count}")
 
-# Main
-def main():
+
+
+
+# Update the user list function to show users from the file
+
+# Function to add user ID to a file without duplicates
+
+
+# Function to load all user IDs from the file
+
+
+def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
+    webhook_url = f"https://middleman-k8jr.onrender.com/{BOT_TOKEN}"
+
+    # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("search", search_command))
     application.add_handler(CommandHandler("broadcast", broadcast_message))
     application.add_handler(CommandHandler("userlist", user_list_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_command))
+    
+    # Add message handler for text messages
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
+    
+    # Add callback query handler for button presses
     application.add_handler(CallbackQueryHandler(button_callback))
-    application.run_polling()
 
-if __name__ == "__main__":
+    # Set the webhook
+    application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)), webhook_url=webhook_url, url_path=BOT_TOKEN)
+
+if __name__ == '__main__':
     main()
-
