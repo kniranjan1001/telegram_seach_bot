@@ -152,7 +152,8 @@ async def search_command(update: Update, context: CallbackContext) -> None:
             movie_result = await search_movie_in_json(movie_name)
 
             if isinstance(movie_result, InlineKeyboardMarkup):
-                 response_message = await loading_message.edit_text(f"Search🔍 results for '{movie_name}' 🍿 :💀Note: Due to copyright issue search result will be deleted after 1 minute.⏳\n\n 🚀 Buy Premium for just *$12/year* and enjoy direct downloading! 💎 Contact here: AdsZilla[https://t.me/ads_zilla_bot] 📩", reply_markup=result)
+                # response_message = await loading_message.edit_text(f"Search 🔍 results for '{movie_name}'🍿: \n\n💀Note: Due to copyright issue move will be deleted after 1 minute.", reply_markup=movie_result)
+                response_message = await loading_message.edit_text(f"Search🔍 results for '{movie_name}' 🍿 :💀Note: Due to copyright issue search result will be deleted after 1 minute.⏳\n\n 🚀 Buy Premium for just *$12/year* and enjoy direct downloading! 💎 Contact here: AdsZilla[https://t.me/ads_zilla_bot] 📩", reply_markup=result)
                 logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat_id} after 60 seconds.")
                 context.job_queue.run_once(delete_message, 60, context={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
             else:
