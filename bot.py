@@ -1,4 +1,4 @@
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+efrom telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, CallbackContext
 from telegram.constants import ChatMemberStatus
 import logging
@@ -119,7 +119,7 @@ async def search_movie(update: Update, context: CallbackContext) -> None:
         result = await search_movie_in_json(movie_name)
 
         if isinstance(result, InlineKeyboardMarkup):
-            response_message = await loading_message.edit_text(f"Search🔍 results for '{movie_name}' 🍿 :💀Note: Due to copyright issue search result will be deleted after 1 minute.⏳\n ⬇️How to download:- [here](https://t.me/cctuitorial/7) \n🎬 *Request a Movie*: [Here](https://t.me/anonyms_middle_man_bot)", reply_markup=result)
+            response_message = await loading_message.edit_text(f"Search🔍 results for '{movie_name}' 🍿 :💀Note: Due to copyright issue search result will be deleted after 1 minute.⏳\n ⬇️How to download:- https://t.me/cctuitorial \n🎬 *Request a Movie*: [Here](https://t.me/anonyms_middle_man_bot)", reply_markup=result)
             logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat_id} after 60 seconds.")
             context.job_queue.run_once(delete_message, 60, data={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
         else:
@@ -153,7 +153,7 @@ async def search_command(update: Update, context: CallbackContext) -> None:
 
             if isinstance(movie_result, InlineKeyboardMarkup):
                 # response_message = await loading_message.edit_text(f"Search 🔍 results for '{movie_name}'🍿: \n\n💀Note: Due to copyright issue move will be deleted after 1 minute.", reply_markup=movie_result)
-                response_message = await loading_message.edit_text(f"Search🔍 results for '{movie_name}' 🍿 :💀Note: Due to copyright issue search result will be deleted after 1 minute.⏳\n⬇️How to download:- [here](https://t.me/cctuitorial/7) \n🎬 *Request a Movie*: [Here](https://t.me/anonyms_middle_man_bot)", reply_markup=result)
+                response_message = await loading_message.edit_text(f"Search🔍 results for '{movie_name}' 🍿 :💀Note: Due to copyright issue search result will be deleted after 1 minute.⏳\n⬇️How to download:- https://t.me/cctuitorial \n🎬 *Request a Movie*: [Here](https://t.me/anonyms_middle_man_bot)", reply_markup=result)
                 logger.info(f"Scheduling deletion for message {response_message.message_id} in chat {update.message.chat_id} after 60 seconds.")
                 context.job_queue.run_once(delete_message, 60, context={'message_id': response_message.message_id, 'chat_id': update.message.chat_id})
             else:
