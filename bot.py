@@ -130,7 +130,7 @@ async def search_movie(update: Update, context: CallbackContext) -> None:
         # Prompt user to subscribe to the channel
          # Prompt user to subscribe to the channel
         message_text = (
-        "🎬Bro subscribe below channels first — then just send the movie name! 🫣"
+        "🎬Bro subscribe below channels first to unlock🔓 access to 3000+ movies & series📺 — then just send the movie name! 🫣"
         )
         
         # Define the buttons
@@ -165,7 +165,7 @@ async def search_command(update: Update, context: CallbackContext) -> None:
     else:
         # Prompt user to subscribe to the channel
         message_text = (
-        "🎬Bro subscribe below channels first — then just send the movie name! 🌟"
+        "🎬Bro subscribe below channels first to unlock🔓 access to 3000+ movies & series📺 — then just send the movie name! 🫣"
         )
         
         # Define the buttons
