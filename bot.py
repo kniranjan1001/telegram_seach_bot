@@ -135,7 +135,7 @@ async def search_movie(update: Update, context: CallbackContext) -> None:
         
         # Define the buttons
         keyboard = [
-            [InlineKeyboardButton("Join Now", url="https://t.me/addlist/4LAlWDoYvHk2ZDdl")]
+            [InlineKeyboardButton("Join Now", url="https://t.me/addlist/ijkMdb6cwtRkYjA1")]
         ]
         await update.message.reply_text(text=message_text,reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
 
@@ -170,7 +170,7 @@ async def search_command(update: Update, context: CallbackContext) -> None:
         
         # Define the buttons
         keyboard = [
-            [InlineKeyboardButton("Join Now", url="https://t.me/addlist/4LAlWDoYvHk2ZDdl")]
+            [InlineKeyboardButton("Join Now", url="https://t.me/addlist/ijkMdb6cwtRkYjA1")]
         ]
         await update.message.reply_text(text=message_text,reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
 # Update the start command to save user IDs
