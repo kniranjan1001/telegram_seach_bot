@@ -41,11 +41,16 @@ async def is_user_subscribed(user_id: int, context: CallbackContext) -> bool:
 def fetch_movie_data():
     try:
         response = requests.get(JSON_URL)
-        response.raise_for_status()  # Raise an error for bad responses
-        return response.json()  # Return the JSON data as a dictionary
-    except requests.RequestException as e:
-        logger.error(f"Error fetching data from JSON URL: {e}")
-        return {}
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException:
+        try:
+            response = requests.get("https://brown-briana-33.tiiny.site/data-1.json")
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"Error fetching data: {e}")
+            return {}
 
 # Function to search movie in JSON data and provide recommendations if not found
 # Function to search for the movie in the JSON data
