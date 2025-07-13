@@ -15,6 +15,7 @@ import threading
 import time
 from aiohttp import web
 import json
+import aiohttp
 
 # Set up logging
 logging.basicConfig(
@@ -42,6 +43,61 @@ user_collection = db['users']
 # Global variables to track application state
 application = None
 is_shutting_down = False
+keep_alive_task = None
+
+# Keep-alive mechanism to prevent Render from sleeping
+async def keep_alive_ping():
+    """Ping the service every 10 minutes to keep it alive"""
+    global is_shutting_down
+    
+    # Get service URL from environment variables
+    service_url = os.environ.get("RENDER_EXTERNAL_URL")
+    
+    # If not set, try to construct from service name
+    if not service_url:
+        service_name = os.environ.get("RENDER_SERVICE_NAME")
+        if service_name:
+            service_url = f"https://{service_name}.onrender.com"
+        else:
+            # Default fallback - you should replace this with your actual service URL
+            service_url = "https://your-service-name.onrender.com"
+    
+    logger.info(f"Keep-alive service will ping: {service_url}")
+    
+    while not is_shutting_down:
+        try:
+            # Use aiohttp for async HTTP requests
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                try:
+                    # Try health endpoint first
+                    async with session.get(f"{service_url}/health") as response:
+                        if response.status == 200:
+                            logger.info(f"✅ Keep-alive ping successful (HTTP {response.status})")
+                        else:
+                            logger.warning(f"⚠️ Keep-alive ping returned status {response.status}")
+                            
+                            # Try root endpoint as fallback
+                            async with session.get(service_url) as root_response:
+                                if root_response.status == 200:
+                                    logger.info(f"✅ Keep-alive root ping successful (HTTP {root_response.status})")
+                                else:
+                                    logger.warning(f"⚠️ Keep-alive root ping failed (HTTP {root_response.status})")
+                                    
+                except aiohttp.ClientError as e:
+                    logger.error(f"❌ Keep-alive ping failed with client error: {e}")
+                except asyncio.TimeoutError:
+                    logger.error("❌ Keep-alive ping timed out")
+                    
+        except Exception as e:
+            logger.error(f"❌ Keep-alive ping failed with unexpected error: {e}")
+        
+        # Wait 10 minutes before next ping (600 seconds)
+        for _ in range(600):  # Check every second for shutdown signal
+            if is_shutting_down:
+                logger.info("🛑 Keep-alive service stopping due to shutdown signal")
+                return
+            await asyncio.sleep(1)
 
 # Improved error handler function with better conflict handling
 async def error_handler(update: Update, context: CallbackContext) -> None:
@@ -459,7 +515,7 @@ async def create_webhook_app():
 
 async def run_bot():
     """Run the bot with proper async handling"""
-    global application, is_shutting_down
+    global application, is_shutting_down, keep_alive_task
     
     logger.info("Starting Movie Search Bot...")
     
@@ -489,15 +545,12 @@ async def run_bot():
     webhook_url = os.environ.get("WEBHOOK_URL")
     port = int(os.environ.get("PORT", 10000))
     
-    # For deployment platforms, always start a web server
-    # If WEBHOOK_URL is not set, we'll use polling but still serve a health endpoint
-    
     try:
         # Initialize the application
         await application.initialize()
         await application.start()
         
-        # Always create and start the web server (for health checks and potential webhook)
+        # Always create and start the web server
         app = await create_webhook_app()
         runner = web.AppRunner(app)
         await runner.setup()
@@ -505,6 +558,10 @@ async def run_bot():
         await site.start()
         
         logger.info(f"Web server started successfully on 0.0.0.0:{port}")
+        
+        # Start keep-alive task
+        logger.info("🚀 Starting keep-alive service...")
+        keep_alive_task = asyncio.create_task(keep_alive_ping())
         
         if webhook_url:
             logger.info(f"Starting webhook mode with URL: {webhook_url}")
@@ -545,6 +602,15 @@ async def run_bot():
     finally:
         logger.info("Shutting down bot...")
         try:
+            # Cancel keep-alive task
+            if keep_alive_task and not keep_alive_task.done():
+                logger.info("🛑 Stopping keep-alive service...")
+                keep_alive_task.cancel()
+                try:
+                    await keep_alive_task
+                except asyncio.CancelledError:
+                    logger.info("Keep-alive task cancelled successfully")
+                
             # Clean shutdown
             if webhook_url:
                 await application.bot.delete_webhook()
