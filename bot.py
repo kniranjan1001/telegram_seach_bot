@@ -43,7 +43,7 @@ user_collection = db['users']
 application = None
 is_shutting_down = False
 
-# Improved error handler function
+# Improved error handler function with better conflict handling
 async def error_handler(update: Update, context: CallbackContext) -> None:
     """Log the error and send a telegram message to notify the developer."""
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
@@ -61,9 +61,12 @@ async def error_handler(update: Update, context: CallbackContext) -> None:
     elif isinstance(context.error, NetworkError):
         logger.warning(f"Network error: {context.error}")
         return
-    elif "webhook" in str(context.error).lower() and "conflict" in str(context.error).lower():
-        logger.error(f"Webhook conflict error: {context.error}")
-        logger.info("This usually means the bot is trying to use polling while webhook is active")
+    elif isinstance(context.error, Conflict):
+        logger.error(f"Conflict error: {context.error}")
+        logger.error("Multiple bot instances detected! Shutting down this instance...")
+        # Gracefully shutdown this instance
+        global is_shutting_down
+        is_shutting_down = True
         return
     
     # For other errors, try to inform the user
@@ -398,19 +401,29 @@ def signal_handler(signum, frame):
     logger.info(f"Received signal {signum}, initiating graceful shutdown...")
     is_shutting_down = True
 
-async def delete_webhook():
-    """Delete any existing webhook before starting"""
+async def clear_existing_instances():
+    """Clear any existing bot instances before starting"""
     try:
         bot = Bot(token=BOT_TOKEN)
-        await bot.delete_webhook()
-        logger.info("Existing webhook deleted successfully")
+        # Delete webhook with drop_pending_updates=True to clear any conflicts
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Cleared existing webhook and pending updates")
+        
+        # Wait a bit to ensure cleanup
+        await asyncio.sleep(2)
+        
         await bot.close()
+        logger.info("Bot cleanup completed successfully")
     except Exception as e:
-        logger.error(f"Error deleting webhook: {e}")
+        logger.error(f"Error during cleanup: {e}")
 
 async def webhook_handler(request):
     """Handle incoming webhook requests"""
     try:
+        # Check if we're shutting down
+        if is_shutting_down:
+            return web.Response(text="Shutting down", status=503)
+            
         # Get the JSON data from the request
         data = await request.json()
         
@@ -448,8 +461,8 @@ async def run_bot():
     
     logger.info("Starting Movie Search Bot...")
     
-    # Delete webhook first
-    await delete_webhook()
+    # Clear any existing instances first
+    await clear_existing_instances()
     
     # Create application
     application = Application.builder().token(BOT_TOKEN).build()
@@ -472,22 +485,23 @@ async def run_bot():
 
     # Environment variables
     webhook_url = os.environ.get("WEBHOOK_URL")
-    port = int(os.environ.get("PORT", 10000))  # Default to 10000 as per Render docs
+    port = int(os.environ.get("PORT", 10000))
     
-    # Check if we should use webhook (for production deployment on Render)
+    # Check if we should use webhook (for production deployment)
     use_webhook = bool(webhook_url)
     
-    if use_webhook:
-        logger.info(f"Starting webhook mode on port {port} with URL: {webhook_url}")
-        
-        try:
+    try:
+        if use_webhook:
+            logger.info(f"Starting webhook mode on port {port} with URL: {webhook_url}")
+            
             # Initialize the application
             await application.initialize()
             await application.start()
             
             # Set the webhook URL
-            await application.bot.set_webhook(url=f"{webhook_url}/{BOT_TOKEN}")
-            logger.info(f"Webhook set to: {webhook_url}/{BOT_TOKEN}")
+            webhook_full_url = f"{webhook_url}/{BOT_TOKEN}"
+            await application.bot.set_webhook(url=webhook_full_url)
+            logger.info(f"Webhook set to: {webhook_full_url}")
             
             # Create and start the web server
             app = await create_webhook_app()
@@ -498,60 +512,57 @@ async def run_bot():
             site = web.TCPSite(runner, '0.0.0.0', port)
             await site.start()
             
-            logger.info(f"Webhook server started on 0.0.0.0:{port}")
+            logger.info(f"Webhook server started successfully on 0.0.0.0:{port}")
             
             # Keep the server running
             while not is_shutting_down:
                 await asyncio.sleep(1)
                 
-        except Exception as e:
-            logger.error(f"Error running webhook: {e}")
-            raise
-        finally:
-            logger.info("Stopping webhook server...")
-            try:
-                await application.bot.delete_webhook()
-                if application.running:
-                    await application.stop()
-                await application.shutdown()
-                logger.info("Webhook server stopped successfully")
-            except Exception as e:
-                logger.error(f"Error during webhook shutdown: {e}")
-    else:
-        # For local development - use polling
-        logger.info("Starting polling mode (local development)...")
-        
-        try:
+        else:
+            # For local development - use polling
+            logger.info("Starting polling mode (local development)...")
+            
             # Initialize and start polling
             await application.initialize()
             await application.start()
-            await application.updater.start_polling(drop_pending_updates=True)
             
-            # Keep the bot running
-            logger.info("Bot is running... Press Ctrl+C to stop")
-            while not is_shutting_down:
-                try:
-                    await asyncio.sleep(1)
-                except asyncio.CancelledError:
-                    logger.info("Sleep cancelled, shutting down...")
-                    break
-                    
-        except asyncio.CancelledError:
-            logger.info("Bot polling cancelled")
-        except Exception as e:
-            logger.error(f"Error in polling: {e}")
-            raise
-        finally:
-            logger.info("Stopping bot...")
+            # Start polling with conflict detection
             try:
-                if application.updater.running:
-                    await application.updater.stop()
-                if application.running:
-                    await application.stop()
-                await application.shutdown()
-                logger.info("Bot stopped successfully")
-            except Exception as e:
-                logger.error(f"Error during shutdown: {e}")
+                await application.updater.start_polling(
+                    drop_pending_updates=True,
+                    allowed_updates=Update.ALL_TYPES
+                )
+                
+                # Keep the bot running
+                logger.info("Bot is running in polling mode... Press Ctrl+C to stop")
+                while not is_shutting_down:
+                    await asyncio.sleep(1)
+                    
+            except Conflict as e:
+                logger.error(f"Conflict detected in polling mode: {e}")
+                logger.error("Another instance is already running!")
+                is_shutting_down = True
+                
+    except Exception as e:
+        logger.error(f"Error running bot: {e}")
+        raise
+    finally:
+        logger.info("Shutting down bot...")
+        try:
+            # Clean shutdown
+            if use_webhook:
+                await application.bot.delete_webhook()
+                
+            if application.updater and application.updater.running:
+                await application.updater.stop()
+                
+            if application.running:
+                await application.stop()
+                
+            await application.shutdown()
+            logger.info("Bot shutdown completed successfully")
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
 
 def main() -> None:
     """Main function to run the bot"""
