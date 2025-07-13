@@ -7,29 +7,39 @@ import requests
 import os
 import asyncio
 import random
+import signal
+import sys
 from fuzzywuzzy import process
 from pymongo import MongoClient
 
 # Set up logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+    level=logging.INFO,
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('bot.log')
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-BOT_TOKEN = os.getenv('BOT_TOKEN')  # Your Telegram bot token
-ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID'))  # Your Telegram user ID
-JSON_URL = os.getenv('JSON_URL')  # URL where your JSON data is stored
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID'))
+JSON_URL = os.getenv('JSON_URL')
 CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME')
 
-# MongoDB setup
+# MongoDB setup with connection pooling
 MONGO_URL = os.getenv('MONGO_URI')
-client = MongoClient(MONGO_URL)
+client = MongoClient(MONGO_URL, maxPoolSize=10, minPoolSize=1, maxIdleTimeMS=30000)
 db = client['movie_bot']
 user_collection = db['users']
 
-# A global set to store unique user IDs
-user_ids = set()
+# Global variable to track application state
+application = None
+is_shutting_down = False
 
-# Error handler function
+# Improved error handler function
 async def error_handler(update: Update, context: CallbackContext) -> None:
     """Log the error and send a telegram message to notify the developer."""
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
@@ -47,6 +57,16 @@ async def error_handler(update: Update, context: CallbackContext) -> None:
     elif isinstance(context.error, NetworkError):
         logger.warning(f"Network error: {context.error}")
         return
+    
+    # For other errors, try to inform the user
+    try:
+        if update and update.effective_chat:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Sorry, something went wrong. Please try again later."
+            )
+    except Exception as e:
+        logger.error(f"Failed to send error message to user: {e}")
 
 # Function to check if a user is subscribed to the channel
 async def is_user_subscribed(user_id: int, context: CallbackContext) -> bool:
@@ -57,39 +77,48 @@ async def is_user_subscribed(user_id: int, context: CallbackContext) -> bool:
         logger.error(f"Error checking subscription status: {e}")
         return False
 
-# Function to fetch movie data from JSON URL
+# Function to fetch movie data from JSON URL with retry logic
 def fetch_movie_data():
-    try:
-        response = requests.get(JSON_URL)
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException:
-        try:
-            response = requests.get("https://brown-briana-33.tiiny.site/data-1.json")
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as e:
-            logger.error(f"Error fetching data: {e}")
-            return {}
+    urls = [JSON_URL, "https://brown-briana-33.tiiny.site/data-1.json"]
+    
+    for url in urls:
+        if not url:
+            continue
+            
+        for attempt in range(3):  # Retry 3 times
+            try:
+                response = requests.get(url, timeout=10)
+                response.raise_for_status()
+                return response.json()
+            except requests.RequestException as e:
+                logger.warning(f"Attempt {attempt + 1} failed for URL {url}: {e}")
+                if attempt < 2:  # Don't sleep on the last attempt
+                    asyncio.sleep(2)
+    
+    logger.error("Failed to fetch movie data from all URLs")
+    return {}
 
 # Function to search for the movie in the JSON data
 async def search_movie_in_json(movie_name: str):
     try:
         # Fetch movie data from the JSON URL
         movie_data = fetch_movie_data()
+        
+        if not movie_data:
+            return "Sorry, movie database is currently unavailable. Please try again later."
 
         # Initialize a list to hold button objects
         buttons = []
 
         # Use fuzzywuzzy to find the closest matches
         movie_names = list(movie_data.keys())
-        closest_matches = process.extract(movie_name, movie_names, limit=6)  # Limit to top 6 matches
+        closest_matches = process.extract(movie_name, movie_names, limit=6)
 
         if closest_matches:
             # Create buttons for the closest matches
             for match in closest_matches:
-                movie_title = match[0]  # The matched movie title
-                movie_url = movie_data[movie_title]  # The associated URL from JSON data
+                movie_title = match[0]
+                movie_url = movie_data[movie_title]
                 buttons.append(InlineKeyboardButton(text=movie_title, url=movie_url))
 
             # Create the inline keyboard markup
@@ -103,6 +132,9 @@ async def search_movie_in_json(movie_name: str):
 
 # Function to delete the message after a delay
 async def delete_message(context: CallbackContext):
+    if is_shutting_down:
+        return
+        
     job_data = context.job.data
     message_id = job_data['message_id']
     chat_id = job_data['chat_id']
@@ -250,9 +282,9 @@ async def search_command(update: Update, context: CallbackContext) -> None:
 # Update the start command to save user IDs
 async def start_command(update: Update, context: CallbackContext) -> None:
     if update.message is None:
-        return  # If there's no message, just return and do nothing
+        return
     
-    user = update.message.from_user  # This will now safely access 'from_user'
+    user = update.message.from_user
     await store_user_id(user.id, user.username, user.first_name)
     
     about_button = InlineKeyboardButton(text="About🧑‍💻", callback_data='about')
@@ -267,7 +299,7 @@ async def start_command(update: Update, context: CallbackContext) -> None:
        "Enjoy your content😎"
     )
     await safe_send_message(update, context, welcome_message, reply_markup=keyboard)
-    
+
 # Function to handle button callbacks
 async def button_callback(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -290,7 +322,6 @@ async def button_callback(update: Update, context: CallbackContext):
             logger.error(f"Error editing message in button_callback: {e}")
 
     elif query.data == "back_to_start":
-        # Send the same message as /start
         about_button = InlineKeyboardButton(text="About🧑‍💻", callback_data='about')
         request_movie_button = InlineKeyboardButton(text="Request Movie😇", url='https://t.me/anonyms_middle_man_bot')
         keyboard = InlineKeyboardMarkup(inline_keyboard=[[about_button], [request_movie_button]])
@@ -349,10 +380,40 @@ async def user_list_command(update: Update, context: CallbackContext):
         logger.error(f"Error getting user count: {e}")
         await safe_send_message(update, context, "Error retrieving user count.")
 
-def main() -> None:
-    application = Application.builder().token(BOT_TOKEN).build()
-    webhook_url = f"https://middleman-k8jr.onrender.com/{BOT_TOKEN}"
+# Health check endpoint
+async def health_check(update: Update, context: CallbackContext):
+    await safe_send_message(update, context, "Bot is running healthy! 🟢")
 
+# Signal handler for graceful shutdown
+def signal_handler(signum, frame):
+    global is_shutting_down
+    logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+    is_shutting_down = True
+    if application:
+        application.stop()
+    sys.exit(0)
+
+# Keep-alive function
+async def keep_alive():
+    while not is_shutting_down:
+        try:
+            logger.info("Bot is alive and running...")
+            await asyncio.sleep(300)  # Log every 5 minutes
+        except Exception as e:
+            logger.error(f"Error in keep_alive: {e}")
+            await asyncio.sleep(60)
+
+def main() -> None:
+    global application
+    
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    logger.info("Starting Movie Search Bot...")
+    
+    application = Application.builder().token(BOT_TOKEN).build()
+    
     # Add error handler
     application.add_error_handler(error_handler)
 
@@ -361,6 +422,7 @@ def main() -> None:
     application.add_handler(CommandHandler("search", search_command))
     application.add_handler(CommandHandler("broadcast", broadcast_message))
     application.add_handler(CommandHandler("userlist", user_list_command))
+    application.add_handler(CommandHandler("health", health_check))
     
     # Add message handler for text messages
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
@@ -368,8 +430,28 @@ def main() -> None:
     # Add callback query handler for button presses
     application.add_handler(CallbackQueryHandler(button_callback))
 
-    # Set the webhook
-    application.run_webhook(listen='0.0.0.0', port=int(os.environ.get("PORT", 5000)), webhook_url=webhook_url, url_path=BOT_TOKEN)
+    # For webhook deployment (like Render)
+    if os.environ.get("WEBHOOK_URL"):
+        webhook_url = os.environ.get("WEBHOOK_URL")
+        port = int(os.environ.get("PORT", 5000))
+        
+        logger.info(f"Starting webhook on port {port} with URL: {webhook_url}")
+        
+        # Start the keep-alive task
+        asyncio.create_task(keep_alive())
+        
+        # Run webhook
+        application.run_webhook(
+            listen='0.0.0.0',
+            port=port,
+            webhook_url=webhook_url,
+            url_path=BOT_TOKEN,
+            drop_pending_updates=True
+        )
+    else:
+        # For local development - use polling
+        logger.info("Starting bot with polling...")
+        application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
     main()
