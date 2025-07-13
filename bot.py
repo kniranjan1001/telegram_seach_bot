@@ -11,6 +11,8 @@ import signal
 import sys
 from fuzzywuzzy import process
 from pymongo import MongoClient
+import threading
+import time
 
 # Set up logging
 logging.basicConfig(
@@ -97,7 +99,7 @@ def fetch_movie_data():
             except requests.RequestException as e:
                 logger.warning(f"Attempt {attempt + 1} failed for URL {url}: {e}")
                 if attempt < 2:  # Don't sleep on the last attempt
-                    asyncio.sleep(2)
+                    time.sleep(2)  # Use time.sleep instead of asyncio.sleep
     
     logger.error("Failed to fetch movie data from all URLs")
     return {}
@@ -413,18 +415,20 @@ async def delete_webhook():
         bot = Bot(token=BOT_TOKEN)
         await bot.delete_webhook()
         logger.info("Existing webhook deleted successfully")
+        await bot.close()  # Close the bot session
     except Exception as e:
         logger.error(f"Error deleting webhook: {e}")
 
-def main() -> None:
+async def run_bot():
+    """Run the bot with proper async handling"""
     global application
-    
-    # Register signal handlers
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
     
     logger.info("Starting Movie Search Bot...")
     
+    # Delete webhook first
+    await delete_webhook()
+    
+    # Create application
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Add error handler
@@ -452,7 +456,7 @@ def main() -> None:
         logger.info(f"Starting webhook on port {port} with URL: {webhook_url}")
         
         # Run webhook
-        application.run_webhook(
+        await application.run_webhook(
             listen='0.0.0.0',
             port=port,
             webhook_url=webhook_url,
@@ -463,11 +467,36 @@ def main() -> None:
         # For local development or when webhook URL is not set - use polling
         logger.info("Starting bot with polling...")
         
-        # Delete any existing webhook first
-        asyncio.run(delete_webhook())
+        # Initialize and start polling
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(drop_pending_updates=True)
         
-        # Run polling
-        application.run_polling(drop_pending_updates=True)
+        # Keep the bot running
+        try:
+            while not is_shutting_down:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Received keyboard interrupt, shutting down...")
+        finally:
+            await application.updater.stop()
+            await application.stop()
+            await application.shutdown()
+
+def main() -> None:
+    """Main function to run the bot"""
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    try:
+        # Run the bot
+        asyncio.run(run_bot())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
