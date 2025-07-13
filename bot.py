@@ -395,9 +395,7 @@ def signal_handler(signum, frame):
     global is_shutting_down
     logger.info(f"Received signal {signum}, initiating graceful shutdown...")
     is_shutting_down = True
-    if application:
-        application.stop()
-    sys.exit(0)
+    # Don't call sys.exit() here - let the main loop handle shutdown
 
 # Keep-alive function
 async def keep_alive():
@@ -455,33 +453,53 @@ async def run_bot():
     if webhook_url and "render.com" in webhook_url:
         logger.info(f"Starting webhook on port {port} with URL: {webhook_url}")
         
-        # Run webhook
-        await application.run_webhook(
-            listen='0.0.0.0',
-            port=port,
-            webhook_url=webhook_url,
-            url_path=BOT_TOKEN,
-            drop_pending_updates=True
-        )
+        try:
+            # Run webhook
+            await application.run_webhook(
+                listen='0.0.0.0',
+                port=port,
+                webhook_url=webhook_url,
+                url_path=BOT_TOKEN,
+                drop_pending_updates=True
+            )
+        except Exception as e:
+            logger.error(f"Error running webhook: {e}")
+            raise
     else:
         # For local development or when webhook URL is not set - use polling
         logger.info("Starting bot with polling...")
         
-        # Initialize and start polling
-        await application.initialize()
-        await application.start()
-        await application.updater.start_polling(drop_pending_updates=True)
-        
-        # Keep the bot running
         try:
+            # Initialize and start polling
+            await application.initialize()
+            await application.start()
+            await application.updater.start_polling(drop_pending_updates=True)
+            
+            # Keep the bot running
+            logger.info("Bot is running... Press Ctrl+C to stop")
             while not is_shutting_down:
-                await asyncio.sleep(1)
-        except KeyboardInterrupt:
-            logger.info("Received keyboard interrupt, shutting down...")
+                try:
+                    await asyncio.sleep(1)
+                except asyncio.CancelledError:
+                    logger.info("Sleep cancelled, shutting down...")
+                    break
+                    
+        except asyncio.CancelledError:
+            logger.info("Bot polling cancelled")
+        except Exception as e:
+            logger.error(f"Error in polling: {e}")
+            raise
         finally:
-            await application.updater.stop()
-            await application.stop()
-            await application.shutdown()
+            logger.info("Stopping bot...")
+            try:
+                if application.updater.running:
+                    await application.updater.stop()
+                if application.running:
+                    await application.stop()
+                await application.shutdown()
+                logger.info("Bot stopped successfully")
+            except Exception as e:
+                logger.error(f"Error during shutdown: {e}")
 
 def main() -> None:
     """Main function to run the bot"""
@@ -494,9 +512,13 @@ def main() -> None:
         asyncio.run(run_bot())
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
+    except SystemExit:
+        logger.info("Bot stopped by system signal")
     except Exception as e:
         logger.error(f"Fatal error: {e}")
         sys.exit(1)
+    finally:
+        logger.info("Bot shutdown complete")
 
 if __name__ == '__main__':
     main()
