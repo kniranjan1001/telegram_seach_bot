@@ -489,44 +489,38 @@ async def run_bot():
     webhook_url = os.environ.get("WEBHOOK_URL")
     port = int(os.environ.get("PORT", 10000))
     
-    # Check if we should use webhook (for production deployment)
-    use_webhook = bool(webhook_url)
+    # For deployment platforms, always start a web server
+    # If WEBHOOK_URL is not set, we'll use polling but still serve a health endpoint
     
     try:
-        if use_webhook:
-            logger.info(f"Starting webhook mode on port {port} with URL: {webhook_url}")
-            
-            # Initialize the application
-            await application.initialize()
-            await application.start()
+        # Initialize the application
+        await application.initialize()
+        await application.start()
+        
+        # Always create and start the web server (for health checks and potential webhook)
+        app = await create_webhook_app()
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', port)
+        await site.start()
+        
+        logger.info(f"Web server started successfully on 0.0.0.0:{port}")
+        
+        if webhook_url:
+            logger.info(f"Starting webhook mode with URL: {webhook_url}")
             
             # Set the webhook URL
             webhook_full_url = f"{webhook_url}/{BOT_TOKEN}"
             await application.bot.set_webhook(url=webhook_full_url)
             logger.info(f"Webhook set to: {webhook_full_url}")
             
-            # Create and start the web server
-            app = await create_webhook_app()
-            
-            # Start the web server
-            runner = web.AppRunner(app)
-            await runner.setup()
-            site = web.TCPSite(runner, '0.0.0.0', port)
-            await site.start()
-            
-            logger.info(f"Webhook server started successfully on 0.0.0.0:{port}")
-            
             # Keep the server running
             while not is_shutting_down:
                 await asyncio.sleep(1)
                 
         else:
-            # For local development - use polling
-            logger.info("Starting polling mode (local development)...")
-            
-            # Initialize and start polling
-            await application.initialize()
-            await application.start()
+            # Use polling mode but still keep web server running
+            logger.info("Starting polling mode with web server...")
             
             # Start polling with conflict detection
             try:
@@ -536,7 +530,7 @@ async def run_bot():
                 )
                 
                 # Keep the bot running
-                logger.info("Bot is running in polling mode... Press Ctrl+C to stop")
+                logger.info("Bot is running in polling mode with web server... Press Ctrl+C to stop")
                 while not is_shutting_down:
                     await asyncio.sleep(1)
                     
@@ -552,7 +546,7 @@ async def run_bot():
         logger.info("Shutting down bot...")
         try:
             # Clean shutdown
-            if use_webhook:
+            if webhook_url:
                 await application.bot.delete_webhook()
                 
             if application.updater and application.updater.running:
