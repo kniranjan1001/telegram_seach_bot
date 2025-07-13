@@ -395,25 +395,14 @@ def signal_handler(signum, frame):
     global is_shutting_down
     logger.info(f"Received signal {signum}, initiating graceful shutdown...")
     is_shutting_down = True
-    # Don't call sys.exit() here - let the main loop handle shutdown
-
-# Keep-alive function
-async def keep_alive():
-    while not is_shutting_down:
-        try:
-            logger.info("Bot is alive and running...")
-            await asyncio.sleep(300)  # Log every 5 minutes
-        except Exception as e:
-            logger.error(f"Error in keep_alive: {e}")
-            await asyncio.sleep(60)
 
 async def delete_webhook():
-    """Delete any existing webhook before starting polling"""
+    """Delete any existing webhook before starting"""
     try:
         bot = Bot(token=BOT_TOKEN)
         await bot.delete_webhook()
         logger.info("Existing webhook deleted successfully")
-        await bot.close()  # Close the bot session
+        await bot.close()
     except Exception as e:
         logger.error(f"Error deleting webhook: {e}")
 
@@ -445,16 +434,22 @@ async def run_bot():
     # Add callback query handler for button presses
     application.add_handler(CallbackQueryHandler(button_callback))
 
-    # Determine if we should use webhook or polling
+    # Environment variables
     webhook_url = os.environ.get("WEBHOOK_URL")
     port = int(os.environ.get("PORT", 5000))
     
-    # For production deployment (webhook)
-    if webhook_url and "render.com" in webhook_url:
-        logger.info(f"Starting webhook on port {port} with URL: {webhook_url}")
+    # Check if we should use webhook (for production deployment)
+    use_webhook = bool(webhook_url and port)
+    
+    if use_webhook:
+        logger.info(f"Starting webhook mode on port {port} with URL: {webhook_url}")
         
         try:
-            # Run webhook
+            # Initialize the application
+            await application.initialize()
+            await application.start()
+            
+            # Start the webhook
             await application.run_webhook(
                 listen='0.0.0.0',
                 port=port,
@@ -462,12 +457,13 @@ async def run_bot():
                 url_path=BOT_TOKEN,
                 drop_pending_updates=True
             )
+            
         except Exception as e:
             logger.error(f"Error running webhook: {e}")
             raise
     else:
-        # For local development or when webhook URL is not set - use polling
-        logger.info("Starting bot with polling...")
+        # For local development - use polling
+        logger.info("Starting polling mode (local development)...")
         
         try:
             # Initialize and start polling
