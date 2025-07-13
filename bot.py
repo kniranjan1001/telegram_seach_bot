@@ -13,6 +13,8 @@ from fuzzywuzzy import process
 from pymongo import MongoClient
 import threading
 import time
+from aiohttp import web
+import json
 
 # Set up logging
 logging.basicConfig(
@@ -406,6 +408,40 @@ async def delete_webhook():
     except Exception as e:
         logger.error(f"Error deleting webhook: {e}")
 
+async def webhook_handler(request):
+    """Handle incoming webhook requests"""
+    try:
+        # Get the JSON data from the request
+        data = await request.json()
+        
+        # Create an Update object from the JSON data
+        update = Update.de_json(data, application.bot)
+        
+        # Process the update
+        await application.process_update(update)
+        
+        return web.Response(text="OK")
+    except Exception as e:
+        logger.error(f"Error processing webhook: {e}")
+        return web.Response(text="Error", status=500)
+
+async def health_handler(request):
+    """Health check endpoint"""
+    return web.Response(text="Bot is healthy!", status=200)
+
+async def create_webhook_app():
+    """Create aiohttp web application for webhook"""
+    app = web.Application()
+    
+    # Add webhook endpoint
+    app.router.add_post(f"/{BOT_TOKEN}", webhook_handler)
+    
+    # Add health check endpoint
+    app.router.add_get("/health", health_handler)
+    app.router.add_get("/", health_handler)  # Root endpoint
+    
+    return app
+
 async def run_bot():
     """Run the bot with proper async handling"""
     global application
@@ -436,10 +472,10 @@ async def run_bot():
 
     # Environment variables
     webhook_url = os.environ.get("WEBHOOK_URL")
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 10000))  # Default to 10000 as per Render docs
     
-    # Check if we should use webhook (for production deployment)
-    use_webhook = bool(webhook_url and port)
+    # Check if we should use webhook (for production deployment on Render)
+    use_webhook = bool(webhook_url)
     
     if use_webhook:
         logger.info(f"Starting webhook mode on port {port} with URL: {webhook_url}")
@@ -449,18 +485,38 @@ async def run_bot():
             await application.initialize()
             await application.start()
             
-            # Start the webhook
-            await application.run_webhook(
-                listen='0.0.0.0',
-                port=port,
-                webhook_url=webhook_url,
-                url_path=BOT_TOKEN,
-                drop_pending_updates=True
-            )
+            # Set the webhook URL
+            await application.bot.set_webhook(url=f"{webhook_url}/{BOT_TOKEN}")
+            logger.info(f"Webhook set to: {webhook_url}/{BOT_TOKEN}")
             
+            # Create and start the web server
+            app = await create_webhook_app()
+            
+            # Start the web server
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, '0.0.0.0', port)
+            await site.start()
+            
+            logger.info(f"Webhook server started on 0.0.0.0:{port}")
+            
+            # Keep the server running
+            while not is_shutting_down:
+                await asyncio.sleep(1)
+                
         except Exception as e:
             logger.error(f"Error running webhook: {e}")
             raise
+        finally:
+            logger.info("Stopping webhook server...")
+            try:
+                await application.bot.delete_webhook()
+                if application.running:
+                    await application.stop()
+                await application.shutdown()
+                logger.info("Webhook server stopped successfully")
+            except Exception as e:
+                logger.error(f"Error during webhook shutdown: {e}")
     else:
         # For local development - use polling
         logger.info("Starting polling mode (local development)...")
