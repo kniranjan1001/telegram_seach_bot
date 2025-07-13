@@ -1,7 +1,7 @@
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, CallbackContext
 from telegram.constants import ChatMemberStatus
-from telegram.error import Forbidden, BadRequest, TimedOut, NetworkError
+from telegram.error import Forbidden, BadRequest, TimedOut, NetworkError, Conflict
 import logging
 import requests
 import os
@@ -56,6 +56,10 @@ async def error_handler(update: Update, context: CallbackContext) -> None:
         return
     elif isinstance(context.error, NetworkError):
         logger.warning(f"Network error: {context.error}")
+        return
+    elif "webhook" in str(context.error).lower() and "conflict" in str(context.error).lower():
+        logger.error(f"Webhook conflict error: {context.error}")
+        logger.info("This usually means the bot is trying to use polling while webhook is active")
         return
     
     # For other errors, try to inform the user
@@ -403,6 +407,15 @@ async def keep_alive():
             logger.error(f"Error in keep_alive: {e}")
             await asyncio.sleep(60)
 
+async def delete_webhook():
+    """Delete any existing webhook before starting polling"""
+    try:
+        bot = Bot(token=BOT_TOKEN)
+        await bot.delete_webhook()
+        logger.info("Existing webhook deleted successfully")
+    except Exception as e:
+        logger.error(f"Error deleting webhook: {e}")
+
 def main() -> None:
     global application
     
@@ -430,15 +443,13 @@ def main() -> None:
     # Add callback query handler for button presses
     application.add_handler(CallbackQueryHandler(button_callback))
 
-    # For webhook deployment (like Render)
-    if os.environ.get("WEBHOOK_URL"):
-        webhook_url = os.environ.get("WEBHOOK_URL")
-        port = int(os.environ.get("PORT", 5000))
-        
+    # Determine if we should use webhook or polling
+    webhook_url = os.environ.get("WEBHOOK_URL")
+    port = int(os.environ.get("PORT", 5000))
+    
+    # For production deployment (webhook)
+    if webhook_url and "render.com" in webhook_url:
         logger.info(f"Starting webhook on port {port} with URL: {webhook_url}")
-        
-        # Start the keep-alive task
-        asyncio.create_task(keep_alive())
         
         # Run webhook
         application.run_webhook(
@@ -449,8 +460,13 @@ def main() -> None:
             drop_pending_updates=True
         )
     else:
-        # For local development - use polling
+        # For local development or when webhook URL is not set - use polling
         logger.info("Starting bot with polling...")
+        
+        # Delete any existing webhook first
+        asyncio.run(delete_webhook())
+        
+        # Run polling
         application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
