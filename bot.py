@@ -39,7 +39,7 @@ client = MongoClient(MONGO_URL, maxPoolSize=10, minPoolSize=1, maxIdleTimeMS=300
 db = client['movie_bot']
 user_collection = db['users']
 
-# Global variable to track application state
+# Global variables to track application state
 application = None
 is_shutting_down = False
 
@@ -143,6 +143,7 @@ async def search_movie_in_json(movie_name: str):
 
 # Function to delete the message after a delay
 async def delete_message(context: CallbackContext):
+    global is_shutting_down
     if is_shutting_down:
         return
         
@@ -419,6 +420,7 @@ async def clear_existing_instances():
 
 async def webhook_handler(request):
     """Handle incoming webhook requests"""
+    global is_shutting_down
     try:
         # Check if we're shutting down
         if is_shutting_down:
@@ -457,7 +459,7 @@ async def create_webhook_app():
 
 async def run_bot():
     """Run the bot with proper async handling"""
-    global application
+    global application, is_shutting_down
     
     logger.info("Starting Movie Search Bot...")
     
