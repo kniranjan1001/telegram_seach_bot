@@ -177,6 +177,13 @@ async def search_movie_in_json(movie_name: str):
         # Initialize a list to hold button objects
         buttons = []
 
+         #  # Add the default button
+        default_button = InlineKeyboardButton(
+            text=f"🔥 {movie_name}",
+            url="https://www.revenuecpmgate.com/dw996yeh08?key=83e6f09c154e9363bbfb6fd6f9172d30"
+        )
+        buttons.append(default_button)
+
         # Use fuzzywuzzy to find the closest matches
         movie_names = list(movie_data.keys())
         closest_matches = process.extract(movie_name, movie_names, limit=6)
