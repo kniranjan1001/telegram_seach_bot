@@ -180,9 +180,9 @@ async def search_movie_in_json(movie_name: str):
          #  # Add the default button
         default_button = InlineKeyboardButton(
             text=f"🔥 {movie_name}",
-            url="https://www.revenuecpmgate.com/dw996yeh08?key=83e6f09c154e9363bbfb6fd6f9172d30"
+            url="https://www.effectivegatecpm.com/k5h6crxw?key=765df64f5636ed1c62734405ab53072a"
         )
-        buttons.append(default_button)
+        # buttons.append(default_button)
 
         # Use fuzzywuzzy to find the closest matches
         movie_names = list(movie_data.keys())
@@ -194,7 +194,9 @@ async def search_movie_in_json(movie_name: str):
                 movie_title = match[0]
                 movie_url = movie_data[movie_title]
                 buttons.append(InlineKeyboardButton(text=movie_title, url=movie_url))
-
+             # Insert default button at a random position
+            insert_pos = random.randint(0, len(buttons))  # can be at start or end too
+            buttons.insert(insert_pos, default_button)
             # Create the inline keyboard markup
             keyboard = InlineKeyboardMarkup(inline_keyboard=[[button] for button in buttons])
             return keyboard
