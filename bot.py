@@ -179,7 +179,7 @@ async def search_movie_in_json(movie_name: str):
 
          #  # Add the default button
         default_button = InlineKeyboardButton(
-            text=f"🔥 {movie_name}",
+            text=f"{movie_name}",
             url="https://www.effectivegatecpm.com/k5h6crxw?key=765df64f5636ed1c62734405ab53072a"
         )
         # buttons.append(default_button)
